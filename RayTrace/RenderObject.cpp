@@ -33,6 +33,7 @@ bool Sphere::shoot(const Ray& ray, vec3& hitPos, vec3& normal) const {
 	vec3 po = center - ray.source;
 	double dl = ray.direction.ddot(ray.direction);
 	double k = po.ddot(ray.direction) / dl;
+	if (k <= 0) return false;
 	vec3 h = po - ray.direction * k;
 	double a = radius_sqr - h.ddot(h);
 	if (a <= 0) return false;
@@ -59,6 +60,8 @@ color_t Texture::get_color(const vec3& pos) const {
 	vec3 v = pos - vertices[0];
 	size_t i = static_cast<size_t>(v.ddot(v2) / hlen2 * img->rows);
 	size_t j = static_cast<size_t>(v.ddot(v1) / wlen2 * img->cols);
+	if (i >= img->rows) i = img->rows - 1;
+	if (j >= img->cols) j = img->cols - 1;
 	return color_t{
 		img->ptr<uchar>(i, j)[0] / 256.0,
 		img->ptr<uchar>(i, j)[1] / 256.0,

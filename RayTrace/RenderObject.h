@@ -63,6 +63,8 @@ public:
 	virtual color_t get_color(const vec3& pos) const { return color; }
 };
 
+using Rectangle = Polygon<4>;
+
 class Sphere : public RenderObject {
 public:
 	vec3 center;
