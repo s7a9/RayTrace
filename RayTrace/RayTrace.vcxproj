@@ -142,13 +142,13 @@
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="Entry.cpp" />
     <ClCompile Include="RayTracer.cpp" />
-    <ClCompile Include="ReflectObject.cpp" />
+    <ClCompile Include="RenderObject.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="LoadScene.hpp" />
     <ClInclude Include="RayTracer.h" />
-    <ClInclude Include="ReflectObject.h" />
+    <ClInclude Include="RenderObject.h" />
     <ClInclude Include="types.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

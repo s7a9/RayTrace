@@ -5,7 +5,7 @@
 #include <random>
 #include <fstream>
 
-#include "ReflectObject.h"
+#include "RenderObject.h"
 #include "LoadScene.hpp"
 #include "RayTracer.h"
 
@@ -17,7 +17,7 @@ std::mt19937 rand_gen(random_device());
 dtype randf() { return dis(rand_gen); }
 // ============================= //
 
-size_t Height = 680, Width = 960, THREAD_N = 1;
+size_t Height = 1080, Width = 1920, THREAD_N = 16;
 cv::Mat* image;
 
 std::vector<const RenderObject*> scene;
@@ -61,6 +61,7 @@ int main(int argc, const char** argv) {
 	delete cam;
 	delete[] thdpool;
 	cv::imshow("show1", *image);
+	cv::imwrite("output.jpg", *image);
 	cv::waitKey(0);
 	delete image;
 	return 0;

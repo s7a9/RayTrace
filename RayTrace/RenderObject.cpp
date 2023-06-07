@@ -1,6 +1,7 @@
-#include "ReflectObject.h"
+#include "RenderObject.h"
 
 #include <cmath>
+#include <opencv2/core/mat.hpp>
 constexpr dtype EPS = 1e-5;
 
 inline bool checkTriangle(const Ray& ray, vec3& hitPos, vec3& normal, 
@@ -46,3 +47,31 @@ RenderObject::RenderObject(uint trait)
 	for (int i = 0; i < 4; ++i)
 		opticalTraitValue[i] = (trait & 1 << i) ? 1.0 : 0.0;
 }
+
+Texture::Texture(vec3* vts, uint trait, cv::Mat* image) :
+	Polygon<4>(vts, { 0, 0, 0 }, trait), img(image) {
+	v1 = vertices[1] - vertices[0], v2 = vertices[3] - vertices[0];
+	wlen2 = v1.ddot(v1);
+	hlen2 = v2.ddot(v2);
+}
+
+color_t Texture::get_color(const vec3& pos) const {
+	vec3 v = pos - vertices[0];
+	size_t i = static_cast<size_t>(v.ddot(v2) / hlen2 * img->rows);
+	size_t j = static_cast<size_t>(v.ddot(v1) / wlen2 * img->cols);
+	return color_t{
+		img->ptr<uchar>(i, j)[0] / 256.0,
+		img->ptr<uchar>(i, j)[1] / 256.0,
+		img->ptr<uchar>(i, j)[2] / 256.0
+	};
+}
+
+SphereLen::SphereLen(vec3 center, dtype radius, color_t color, uint trait, dtype refraction_index) :
+	Sphere(center, radius, color, trait | RenderObject::Refractive), 
+	refraction_index(refraction_index) {}
+
+dtype SphereLen::get_refraction_index(const vec3& pos) const
+{
+	return refraction_index;
+}
+

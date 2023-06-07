@@ -18,7 +18,7 @@
     <ClCompile Include="Entry.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="ReflectObject.cpp">
+    <ClCompile Include="RenderObject.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="Camera.cpp">
@@ -29,7 +29,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ReflectObject.h">
+    <ClInclude Include="RenderObject.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Camera.h">

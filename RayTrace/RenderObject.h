@@ -46,7 +46,7 @@ public:
 
 template <size_t V>
 class Polygon : public RenderObject {
-private:
+protected:
 	vec3 vertices[V];
 
 	color_t color;
@@ -89,3 +89,27 @@ inline bool Polygon<V>::shoot(const Ray& ray, vec3& hitPos, vec3& normal) const 
 	}
 	return false;
 }
+
+class Texture : public Polygon<4> {
+private:
+	cv::Mat* img;
+
+	dtype wlen2, hlen2;
+
+	vec3 v1, v2;
+
+public:
+	Texture(vec3* vts, uint trait, cv::Mat* image);
+
+	color_t get_color(const vec3& pos) const;
+};
+
+class SphereLen : public Sphere {
+private:
+	dtype refraction_index;
+
+public:
+	SphereLen(vec3 center, dtype radius, color_t color, uint trait, dtype refraction_index);
+
+	dtype get_refraction_index(const vec3& pos) const;
+};

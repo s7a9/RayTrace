@@ -12,3 +12,5 @@ struct Ray {
 
 	vec3 direction;
 };
+
+class PicNotFoundException {};
