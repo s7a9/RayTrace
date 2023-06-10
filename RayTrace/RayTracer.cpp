@@ -2,7 +2,15 @@
 
 #include <cmath>
 
-const RenderObject* hit_all(const std::vector<const RenderObject*>& objs,
+inline void refract(vec3 src, const vec3& normal, vec3& refl, dtype ri) {
+	src /= sqrtf(src.dot(src));
+	float sdn = src.dot(normal);
+	float x = 1 - ri * ri * (1 - sdn * sdn);
+	if (x < 0) refl = src - 2.0f * sdn * normal;
+	else refl = ri * src - (ri * sdn + sqrtf(x)) * normal;
+}
+
+inline const RenderObject* hit_all(const std::vector<const RenderObject*>& objs,
 	const Ray& ray, vec3& min_hitp, vec3& min_norm, double& min_dis) {
 	min_dis = -1.0;
 	const RenderObject* ret = nullptr;
@@ -39,19 +47,16 @@ color_t RayTrace_recursive(const std::vector<const RenderObject*>& objs,
 		if (obj->opticalTrait & RenderObject::Emissive) {
 			color += obj->opticalTraitValue[0] * obj_color;
 		}
-		// make norm dot (dir + norm) equals zero
-		if (obj->opticalTrait & 14) {
-			norm *= -ray.direction.ddot(norm) / norm.ddot(norm);
-		}
+		norm /= sqrtf(norm.dot(norm));
 		if (obj->opticalTrait & (RenderObject::Reflective + RenderObject::Diffuse)) {
-			new_ray.direction = 2 * norm + ray.direction;
+			new_ray.direction = ray.direction - 2.0f * ray.direction.dot(norm) * norm;
 			color += (obj->opticalTraitValue[1] + 0.2 * obj->opticalTraitValue[3]) *
 				RayTrace_recursive(objs, new_ray, depth - 1, envir).mul(obj_color);
 		}
 		if (obj->opticalTrait & RenderObject::Refractive) {
-			dtype obj_refration_index = obj->get_refraction_index(new_ray.source);
-			new_ray.direction = ray.direction * (2.0 - obj_refration_index) +
-				(1.0 - obj_refration_index) * norm;
+			refract(ray.direction, norm, new_ray.direction,
+				obj->get_refraction_index(new_ray.source, ray));
+			new_ray.source += 0.01 * new_ray.direction;
 			color += obj->opticalTraitValue[2] * 
 				RayTrace_recursive(objs, new_ray, depth - 1, envir).mul(obj_color);
 		}
@@ -79,25 +84,23 @@ bool RayTrace(const std::vector<const RenderObject*>& objs, const Ray& ray,
 	if (obj->opticalTrait & RenderObject::Emissive) {
 		color += obj->opticalTraitValue[0] * obj_color;
 	}
+	norm /= sqrtf(norm.dot(norm));
 	if (obj->opticalTrait & (RenderObject::Reflective + RenderObject::Refractive)) {
-		norm *= -ray.direction.ddot(norm) / norm.ddot(norm);
 		if (obj->opticalTrait & RenderObject::Reflective) {
-			new_ray.direction = 2 * norm + ray.direction;
-			RayTrace(objs, new_ray, sample_n / 2, rand_float, envir, color_tmp, depth - 1);
+			new_ray.direction = ray.direction - 2.0f * ray.direction.dot(norm) * norm;
+			RayTrace(objs, new_ray, sample_n , rand_float, envir, color_tmp, depth - 1);
 			color += obj->opticalTraitValue[1] * color_tmp.mul(obj_color);
 		}
 		if (obj->opticalTrait & RenderObject::Refractive) {
-			dtype obj_refration_index = obj->get_refraction_index(new_ray.source);
-			new_ray.direction = ray.direction * (2.0 - obj_refration_index) +
-				(1.0 - obj_refration_index) * norm;
-			RayTrace(objs, new_ray, sample_n / 2, rand_float, envir, color_tmp, depth - 1);
+			refract(ray.direction, norm, new_ray.direction,
+				obj->get_refraction_index(new_ray.source, ray));
+			new_ray.source += 0.01 * new_ray.direction;
+			RayTrace(objs, new_ray, sample_n, rand_float, envir, color_tmp, depth - 1);
 			color += obj->opticalTraitValue[2] * color_tmp.mul(obj_color);
 		}
 	}
 	if (obj->opticalTrait & RenderObject::Diffuse) {
 		color_t diffuse_color_sum;
-		dis = sqrt(norm.ddot(norm));
-		norm /= dis;
 		for (int i = 0; i < sample_n; ++i) {
 			do {
 				rd = 2.0 * vec3(rand_float(), rand_float(), rand_float()) - vec3(1.0, 1.0, 1.0);

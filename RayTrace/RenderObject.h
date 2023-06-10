@@ -23,7 +23,7 @@ public:
 
 	virtual color_t get_color(const vec3& pos) const = 0;
 
-	virtual dtype get_refraction_index(const vec3& pos) const { return 0.0; }
+	virtual dtype get_refraction_index(const vec3& pos, const Ray& ray) const { return 1.0; }
 };
 
 class Triangle : public RenderObject {
@@ -113,5 +113,5 @@ private:
 public:
 	SphereLen(vec3 center, dtype radius, color_t color, uint trait, dtype refraction_index);
 
-	dtype get_refraction_index(const vec3& pos) const;
+	dtype get_refraction_index(const vec3& pos, const Ray& ray) const;
 };

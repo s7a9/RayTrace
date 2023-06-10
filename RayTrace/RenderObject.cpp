@@ -31,14 +31,22 @@ Sphere::Sphere(vec3 center, dtype radius, color_t color, uint trait):
 
 bool Sphere::shoot(const Ray& ray, vec3& hitPos, vec3& normal) const {
 	vec3 po = center - ray.source;
-	double dl = ray.direction.ddot(ray.direction);
-	double k = po.ddot(ray.direction) / dl;
-	if (k <= 0) return false;
+	float dl = ray.direction.dot(ray.direction);
+	float k = po.dot(ray.direction);
+	float lpo = po.dot(po);
+	if (k <= 0 && lpo > radius_sqr) return false;
+	k /= dl;
 	vec3 h = po - ray.direction * k;
-	double a = radius_sqr - h.ddot(h);
+	float a = radius_sqr - h.dot(h);
 	if (a <= 0) return false;
-	hitPos = ray.source + ray.direction * (k - sqrt(a / dl));
-	normal = hitPos - center;
+	if (lpo > radius_sqr) {
+		hitPos = ray.source + ray.direction * (k - sqrtf(a / dl));
+		normal = hitPos - center;
+	}
+	else {
+		hitPos = ray.source + ray.direction * (k + sqrtf(a / dl));
+		normal = center - hitPos;
+	}
 	return true;
 }
 
@@ -73,8 +81,10 @@ SphereLen::SphereLen(vec3 center, dtype radius, color_t color, uint trait, dtype
 	Sphere(center, radius, color, trait | RenderObject::Refractive), 
 	refraction_index(refraction_index) {}
 
-dtype SphereLen::get_refraction_index(const vec3& pos) const
+dtype SphereLen::get_refraction_index(const vec3& pos, const Ray& ray) const
 {
-	return refraction_index;
+	if (ray.direction.dot(pos - center) > 0)
+		return refraction_index;
+	return 1.0f / refraction_index;
 }
 

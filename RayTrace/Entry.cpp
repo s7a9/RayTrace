@@ -1,4 +1,4 @@
-#include "opencv2/opencv.hpp"
+#include <opencv2/opencv.hpp>
 #include <iostream>
 #include <string>
 #include <atomic>
@@ -23,7 +23,9 @@ cv::Mat* image;
 std::vector<const RenderObject*> scene;
 Camera* cam;
 // vec3 envir_color{0.5, 0.5, 0.5};
-int sample_n = 64;
+int sample_n = 32;
+size_t anti_alias = 2;
+float alpha = 1.f;
 
 
 // Multithread render acceleration //
@@ -34,21 +36,30 @@ void render_line() {
 		int row = cur_row++;
 		if (row * 10 % Height == 0) std::cout << (row * 10) / Height << ' ';
 		for (int i = 0; i < Width; ++i) {
-			Ray ray = cam->cast(row, i);
 			color_t color;
-			RayTrace(scene, ray, sample_n, randf, envir_color, color);
+			for (int j = 0; j < anti_alias; ++j) {
+				for (int k = 0; k < anti_alias; ++k) {
+					color_t color_i;
+					RayTrace(scene, cam->cast(row * anti_alias + j, i * anti_alias + k), 
+						sample_n, randf, envir_color, color_i);
+					color += color_i;
+				}
+			}
+			color /= (double)(anti_alias * anti_alias);
 			for (int k = 0; k < 3; ++k) {
-				image->ptr<uchar>(row, i)[k] = 255 * color[k];
+				uint val = 255 * color[k] * alpha;
+				if (val > 255) val = 255;
+				image->ptr<uchar>(row, i)[k] = val;
 			}
 		}
 	}
-}
+} 
 
 int main(int argc, const char** argv) {
 	image = new cv::Mat(Height, Width, CV_8UC3);
 	cur_row = 0;
 	scene = load_scene();
-	cam = load_camera(Width, Height);
+	cam = load_camera(Width * anti_alias, Height * anti_alias);
 	std::thread** thdpool = new std::thread*[THREAD_N];
 	for (int i = 0; i < THREAD_N; ++i) {
 		thdpool[i] = new std::thread(render_line);
