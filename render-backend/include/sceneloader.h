@@ -18,11 +18,14 @@ namespace vrt {
 class SceneLoader {
     std::vector<RenderObject> objects_;
     std::vector<ModelTransform> transforms_;
+    std::vector<Material> materials_;
     RenderObject* d_objects_;
+    Material* d_materials_;
     RenderConfig config_;
     int n_objects_;
 
     int load_object(std::ifstream& file);
+    int load_texture(const std::string& filename, Material& material);
 
 public:
     SceneLoader();
@@ -31,7 +34,11 @@ public:
     int load_scene(const std::string& filename);
 
     const RenderObject* device_objects() const { return d_objects_; }
-    int size() const { return n_objects_; }
+    int num_object() const { return n_objects_; }
+
+    const Material* device_materials() const { return d_materials_; }
+    int num_material() const { return materials_.size(); }
+
     RenderConfig& config() { return config_; }
 };
 

@@ -12,7 +12,6 @@ struct RenderObject {
     BVHNode* bvh;
     int n_triangles;
     int n_bvh_nodes;
-    Material material;
 };
 
 }

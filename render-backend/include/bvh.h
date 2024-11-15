@@ -14,7 +14,7 @@ struct AABB {
     float3 min;
     float3 max;
 
-    __host__ AABB() = default;
+    __host__ AABB() : min(make_float3(INFINITY, INFINITY, INFINITY)), max(make_float3(-INFINITY, -INFINITY, -INFINITY)) {}
 
     __host__ AABB(const float3& a, const float3& b) : min(a), max(b) {}
 

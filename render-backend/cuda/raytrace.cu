@@ -18,7 +18,7 @@ struct HitRecord {
     float3 color;
     float t, u, v;
     Triangle* triangle;
-    RenderObject* object;
+    int material_id;
 };
 
 SUBROUTINE bool triangle_intersect(const Triangle& tri, const Ray& r, HitRecord& rec) {
@@ -26,7 +26,7 @@ SUBROUTINE bool triangle_intersect(const Triangle& tri, const Ray& r, HitRecord&
     float3 e2 = tri.v[2].position - tri.v[0].position;
     float3 p = cross(r.direction, e2);
     float det = dot3(e1, p);
-    if (det > -1e-6 && det < 1e-6) return false;
+    if (det > -1e-6f && det < 1e-6f) return false;
     float inv_det = 1.0f / det;
     float3 tvec = r.origin - tri.v[0].position;
     float u = dot3(tvec, p) * inv_det;
@@ -70,22 +70,26 @@ SUBROUTINE bool object_intersect(const RenderObject& object, const Ray& r, HitRe
         }
     }
     if (hit_triangle >= 0) {
-        rec.object = (RenderObject*)&object;
         rec.triangle = &object.triangles[hit_triangle];
+        rec.material_id = rec.triangle->material_id;
         return true;
     }
     return false;
 }
 
-SUBROUTINE void triangle_interpolate(HitRecord& rec) { // get the normal and color
+SUBROUTINE void triangle_interpolate(HitRecord& rec, const Material* materials) { // get the normal and color
     float u = rec.u, v = rec.v;
     float w = 1.0f - u - v;
     float3 norm = w * rec.triangle->v[0].normal + u * rec.triangle->v[1].normal + v * rec.triangle->v[2].normal;
     rec.normal = normalize(norm);
-    if (rec.object->material.tex_type == Material::SIMPLE) {
-        rec.color = rec.object->material.albedo;
+    auto& material = materials[rec.material_id];
+    if (material.cu_array == nullptr) {
+        rec.color = material.albedo;
     } else {
-        rec.color = make_float3(0.0f, 1.0f, 0.0f); // TODO: texture mapping
+        float texcoord_x = w * rec.triangle->v[0].texcoord.x + u * rec.triangle->v[1].texcoord.x + v * rec.triangle->v[2].texcoord.x;
+        float texcoord_y = w * rec.triangle->v[0].texcoord.y + u * rec.triangle->v[1].texcoord.y + v * rec.triangle->v[2].texcoord.y;
+        float4 texel = tex2D<float4>(material.tex_obj, texcoord_x, texcoord_y);
+        rec.color = make_float3(texel.x, texel.y, texel.z);
     }
 }
 
@@ -172,6 +176,7 @@ __global__ void raytrace_kernel(
     int max_depth, float russian_roulette,
     int n_rays, Ray* rays,
     int n_objects, const RenderObject* objects,
+    int n_materials, const Material* materials,
     float3* output_buffer
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -190,11 +195,11 @@ __global__ void raytrace_kernel(
             color *= ambient;
             break;
         }
-        triangle_interpolate(rec);
+        triangle_interpolate(rec, materials);
         // debug: return abs normal as color
         // color = make_float3(abs(rec.normal.x), abs(rec.normal.y), abs(rec.normal.z));
         // break;
-        auto& material = rec.object->material;
+        auto& material = materials[rec.material_id];
         if (material.type == Material::LIGHT) {
             color *= rec.color;
             break;
@@ -235,13 +240,15 @@ __host__ void raytrace(
     int max_depth, float alpha, float3 ambient,  float russian_roulette,
     int n_rays, Ray* rays,
     int n_objects, const RenderObject* objects,
+    int n_materials, const Material* materials,
     float3* output_buffer
 ) {
     int block_size = 64, n_pixels = n_rays / spp;
     int num_blocks = (n_rays + block_size - 1) / block_size;
     raytrace_kernel<<<num_blocks, block_size>>>(
         randstate, n_randstate, spp, ambient, max_depth, russian_roulette,
-        n_rays, rays, n_objects, objects, output_buffer
+        n_rays, rays, n_objects, objects, n_materials, materials,
+        output_buffer
     );
     cudaDeviceSynchronize();
     // print the output buffer to file

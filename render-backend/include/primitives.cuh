@@ -26,6 +26,7 @@ struct Vertex {
 };
 
 struct Triangle {
+    int material_id;
     Vertex v[3];
 };
 

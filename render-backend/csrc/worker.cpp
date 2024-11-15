@@ -44,6 +44,7 @@ void Worker::post_process_(float3* d_buffer) {
     cudaMemcpy(img.data, d_buffer, n_pixels_ * sizeof(float3), cudaMemcpyDeviceToHost);
     cv::flip(img, img, 0); // flip image upside down
     img.convertTo(img, CV_8UC3, 255.0f);
+    cv::cvtColor(img, img, cv::COLOR_RGB2BGR);
     // construct filename using time
     auto now = std::chrono::system_clock::now();
     auto now_c = std::chrono::system_clock::to_time_t(now);
@@ -64,6 +65,7 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
     // record start time
     auto start = std::chrono::high_resolution_clock::now();
     std::cout << "---> Raytracing <---" << std::endl;
+    cudaDeviceSynchronize();
     setup_raytrace(d_rand_state_, 0, config.width, config.height, config.n_samples, 
         config.camera_pos, config.camera_dir, config.camera_up, config.fov, d_buffer, d_rays);
     cudaDeviceSynchronize();
@@ -80,7 +82,10 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
         d_rand_state_, n_pixels_, 
         config.n_samples, config.max_depth, config.alpha, config.background, 
         config.russian_roulette, 
-        n_rays_, d_rays, loader.size(), loader.device_objects(), d_buffer
+        n_rays_, d_rays, 
+        loader.num_object(), loader.device_objects(),
+        loader.num_material(), loader.device_materials(),
+        d_buffer
     );
     std::cout << "Raytracing done" << std::endl;
     // record end time
