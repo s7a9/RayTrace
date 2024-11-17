@@ -46,12 +46,13 @@ void Worker::post_process_(float3* d_buffer) {
     img.convertTo(img, CV_8UC3, 255.0f);
     cv::cvtColor(img, img, cv::COLOR_RGB2BGR);
     // construct filename using time
-    auto now = std::chrono::system_clock::now();
-    auto now_c = std::chrono::system_clock::to_time_t(now);
+    // auto now = std::chrono::system_clock::now();
+    // auto now_c = std::chrono::system_clock::to_time_t(now);
     std::lock_guard<std::mutex> lock(output_mutex);
-    char time_string[MaxFilenameLength];
-    int n = strftime(time_string, MaxFilenameLength, "%Y-%m-%d-%H-%M-%S.png", std::localtime(&now_c));
-    n = snprintf(output_filename, MaxFilenameLength, "%s/%s", output_dir.c_str(), time_string);
+    char time_string[MaxFilenameLength] = "output";
+    int n;
+    // n = strftime(time_string, MaxFilenameLength, "%Y-%m-%d-%H-%M-%S", std::localtime(&now_c));
+    n = snprintf(output_filename, MaxFilenameLength, "%s/%s-%s.png", output_dir.c_str(), scene_name.c_str(), time_string);
     if (n >= MaxFilenameLength) {
         std::cerr << "Filename too long" << std::endl;
         return;
@@ -60,37 +61,54 @@ void Worker::post_process_(float3* d_buffer) {
     cv::imwrite(output_filename, img);
 }
 
+void print_progress_bar(int current, int total, std::chrono::duration<float> elapsed) {
+    int bar_width = 32;
+    float progress = (float)current / total;
+    int pos = bar_width * progress;
+    std::cout << "[";
+    for (int i = 0; i < bar_width; i++) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << "%\t";
+    std::cout << "Elapsed(s): " << elapsed.count() << ", ";
+    std::cout << "ETA(s): " << (elapsed / progress - elapsed).count() << "" << std::endl;
+}
+
 void Worker::render_(float3* d_buffer, Ray* d_rays) {
     auto config = loader.config();
     // record start time
     auto start = std::chrono::high_resolution_clock::now();
-    std::cout << "---> Raytracing <---" << std::endl;
-    cudaDeviceSynchronize();
-    setup_raytrace(d_rand_state_, 0, config.width, config.height, config.n_samples, 
-        config.camera_pos, config.camera_dir, config.camera_up, config.fov, d_buffer, d_rays);
-    cudaDeviceSynchronize();
-    // print config
-    std::cout << "Camera position: " << config.camera_pos.x << " " << config.camera_pos.y << " " << config.camera_pos.z << std::endl;
-    std::cout << "Camera direction: " << config.camera_dir.x << " " << config.camera_dir.y << " " << config.camera_dir.z << std::endl;
-    std::cout << "Camera up: " << config.camera_up.x << " " << config.camera_up.y << " " << config.camera_up.z << std::endl;
-    std::cout << "FOV: " << config.fov << std::endl;
-    std::cout << "Max ray depth: " << config.max_depth << std::endl;
-    std::cout << "Alpha: " << config.alpha << std::endl;
-    std::cout << "Background: " << config.background.x << " " << config.background.y << " " << config.background.z << std::endl;
-    std::cout << "Russian roulette: " << config.russian_roulette << std::endl;
-    raytrace(
-        d_rand_state_, n_pixels_, 
-        config.n_samples, config.max_depth, config.alpha, config.background, 
-        config.russian_roulette, 
-        n_rays_, d_rays, 
-        loader.num_object(), loader.device_objects(),
-        loader.num_material(), loader.device_materials(),
-        d_buffer
-    );
-    std::cout << "Raytracing done" << std::endl;
+    std::cout << "---> Raytracing Start <---" << std::endl;
+    int n_sample_remain = config.n_samples;
+    cudaMemset(d_buffer, 0, n_pixels_ * sizeof(float3));
+    while (n_sample_remain > 0) {
+        int n_sample = std::min(n_sample_remain, config.batch_size);
+        setup_raytrace(
+            d_rand_state_, config.width, config.height, n_sample,
+            config.camera_pos, config.camera_dir, config.camera_up, config.fov,
+            d_rays
+        );
+        cudaDeviceSynchronize();
+        raytrace(
+            d_rand_state_, config.width * config.height, n_sample,
+            config.max_depth, config.background, config.russian_roulette,
+            n_rays_, d_rays,
+            loader.num_object(), loader.device_objects(),
+            loader.num_material(), loader.device_materials(),
+            d_buffer
+        );
+        cudaDeviceSynchronize();
+        n_sample_remain -= n_sample;
+        // print a moving progress bar
+        print_progress_bar(config.n_samples - n_sample_remain, config.n_samples, std::chrono::high_resolution_clock::now() - start);
+    }
+    post_process(config.width * config.height, config.n_samples, config.alpha, d_buffer);
+    std::cout << "---> done in ";
     // record end time
     auto end = std::chrono::high_resolution_clock::now();
-    std::cout << "Time taken: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms <---" << std::endl;
     post_process_(d_buffer);
 }
 
@@ -104,7 +122,7 @@ void Worker::run_loop_() {
     }
 }
 
-Worker::Worker(const std::string& scene_file, const std::string& output_dir) : 
+Worker::Worker(const std::string& scene_file, const std::string& output_dir, int batch_size) : 
     should_exit(false), has_new_input(false), output_dir(output_dir) {
     output_filename[0] = '\0';
     if (loader.load_scene(scene_file) != 0) {
@@ -112,12 +130,37 @@ Worker::Worker(const std::string& scene_file, const std::string& output_dir) :
         exit(0);
     }
     auto& config = loader.config();
+    if (batch_size <= 0 || batch_size > config.n_samples) {
+        batch_size = config.n_samples;
+    } else if (config.n_samples % batch_size != 0) {
+        std::cerr << "Warning: batch size " << batch_size 
+            << " is not a divisor of sample per pixel " << config.n_samples << std::endl;
+        std::cerr << "Setting batch size to spp, which may cause CUDA OOM." << std::endl;
+        batch_size = config.n_samples;
+    }
+    config.batch_size = batch_size;
     init_randstate(&d_rand_state_, config.width, config.height);
     n_pixels_ = config.width * config.height;
-    n_rays_ = n_pixels_ * config.n_samples;
-    cudaMalloc(&d_buffer_, n_pixels_ * sizeof(float3));
-    cudaMalloc(&d_rays_, n_rays_ * sizeof(Ray));
+    n_rays_ = n_pixels_ * config.batch_size;
+    // malloc device memory and detect OOM error
+    auto err = cudaMalloc(&d_buffer_, n_pixels_ * sizeof(float3));
+    if (err != cudaSuccess) {
+        std::cerr << "Failed to allocate device memory for buffer, " 
+            << "error: " << cudaGetErrorString(err) << std::endl;
+        exit(0);
+    }
+    err = cudaMalloc(&d_rays_, n_rays_ * sizeof(Ray));
+    if (err != cudaSuccess) {
+        std::cerr << "Failed to allocate device memory for rays, " 
+            << "error: " << cudaGetErrorString(err) << std::endl;
+        exit(0);
+    }
     cudaDeviceSynchronize();
+    // extract scene name as output filename prefix
+    auto pos = scene_file.find_last_of('/');
+    pos = (pos == std::string::npos) ? 0 : pos + 1;
+    scene_name = scene_file.substr(pos, scene_file.find_last_of('.') - pos);
+    std::cout << "worker: loaded scene: " << scene_name << std::endl;
 }
 
 Worker::~Worker() {

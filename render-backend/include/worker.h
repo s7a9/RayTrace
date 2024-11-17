@@ -32,6 +32,7 @@ class Worker {
     size_t n_rays_;
     std::mutex output_mutex;
     std::string output_dir;
+    std::string scene_name;
 
     void post_process_(float3* d_buffer);
 
@@ -40,7 +41,7 @@ class Worker {
     void run_loop_();
 
 public:
-    Worker(const std::string& scene_file, const std::string& output_dir);
+    Worker(const std::string& scene_file, const std::string& output_dir, int batch_size);
 
     ~Worker();
 

@@ -8,7 +8,7 @@
 namespace vrt {
 
 struct ModelTransform {
-    float scale;
+    float3 scale;
     float3 translation;
     float3 rotation;
 };

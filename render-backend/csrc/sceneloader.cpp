@@ -39,9 +39,9 @@ int SceneLoader::load_object(std::ifstream& file) {
     ModelTransform transform;
     float3& position = transform.translation;
     float3& rotation = transform.rotation;
-    float& scale = transform.scale;
+    float3& scale = transform.scale;
     position = rotation = make_float3(0.0f, 0.0f, 0.0f);
-    scale = 1.0f;
+    scale = make_float3(1.0f, 1.0f, 1.0f);
     Material::MaterialType type = Material::NONE;
     float3 albedo = make_float3(0.f, 0.f, 0.f);
     float optical_density = 1.0f;
@@ -57,7 +57,7 @@ int SceneLoader::load_object(std::ifstream& file) {
         file >> key;
         if (key == "position") { file >> position.x >> position.y >> position.z; }
         else if (key == "rotation") { file >> rotation.x >> rotation.y >> rotation.z; }
-        else if (key == "scale") { file >> scale; }
+        else if (key == "scale") { file >> scale.x >> scale.y >> scale.z; }
         else if (key == "path") {
             std::getline(file, objfilename);
             objfilename = objfilename.substr(1);
@@ -65,7 +65,7 @@ int SceneLoader::load_object(std::ifstream& file) {
         else if (key == "mtldir") { 
             std::getline(file, mtldir);
             mtldir = mtldir.substr(1);
-         }
+        }
         else if (key == "albedo") { file >> albedo.x >> albedo.y >> albedo.z; }
         else if (key == "optical_density") { file >> optical_density; }
         else if (key == "metal_fuzz") { file >> metal_fuzz; }
@@ -188,9 +188,25 @@ int SceneLoader::load_object(std::ifstream& file) {
     if (!simple_material && materials.size() > 0) {
         for (size_t i = 0; i < materials.size(); i++) {
             const auto& mat = materials[i];
-            materials_.push_back(make_material(type, 
-                make_float3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]), 
-                optical_density, metal_fuzz));
+            switch (mat.illum) {
+            case 1: type = Material::LAMBERTIAN; break;
+            case 2: type = Material::METAL; break;
+            case 3: type = Material::LIGHT; break;
+            case 4: type = Material::REFRACTIVE; break; // custom type glass
+            case 5: type = Material::REFLECTIVE; break; // custom type mirror
+            default: type = Material::LAMBERTIAN; break;
+            }
+            float3 albedo;
+            if (type == Material::LIGHT) {
+                albedo = make_float3(mat.emission[0], mat.emission[1], mat.emission[2]);
+            } else {
+                albedo = make_float3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]);
+                if (type == Material::REFRACTIVE) {
+                    optical_density = mat.ior;
+                    albedo = (1.f - mat.dissolve) * make_float3(1.f, 1.f, 1.f) + mat.dissolve * albedo;
+                }
+            }
+            materials_.push_back(make_material(type, albedo, optical_density, metal_fuzz));
             if (!mat.diffuse_texname.empty()) {
                 std::string texname = mtldir + "/" + mat.diffuse_texname;
                 std::cout << "    Loading texture " << texname << std::endl;
@@ -214,7 +230,8 @@ int SceneLoader::load_texture(const std::string& filename, Material& material) {
     cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<uchar4>();
     cudaArray* cu_array;
     cudaMallocArray(&cu_array, &channelDesc, img.cols, img.rows);
-    cudaMemcpy2DToArray(cu_array, 0, 0, img.data, img.step, img.cols * sizeof(uchar4), img.rows, cudaMemcpyHostToDevice);
+    cudaMemcpy2DToArray(cu_array, 0, 0, img.data, img.step, 
+        img.cols * sizeof(uchar4), img.rows, cudaMemcpyHostToDevice);
     cudaResourceDesc res_desc;
     memset(&res_desc, 0, sizeof(res_desc));
     res_desc.resType = cudaResourceTypeArray;
@@ -323,10 +340,12 @@ int SceneLoader::load_scene(const std::string& filename) {
         int n_tri = objects_[i].n_triangles;
         cudaStreamSynchronize(stream);
         cudaMallocAsync(&d_tri, n_tri * sizeof(Triangle), stream);
-        cudaMemcpyAsync(d_tri, objects_[i].triangles, n_tri * sizeof(Triangle), cudaMemcpyHostToDevice, stream);
+        cudaMemcpyAsync(d_tri, objects_[i].triangles, n_tri * sizeof(Triangle), 
+            cudaMemcpyHostToDevice, stream);
         objects_[i].triangles = d_tri;
         apply_transform(transforms_[i], d_tri, objects_[i].n_triangles, stream);
-        cudaMemcpyAsync(h_tris[i], d_tri, objects_[i].n_triangles * sizeof(Triangle), cudaMemcpyDeviceToHost, stream);
+        cudaMemcpyAsync(h_tris[i], d_tri, objects_[i].n_triangles * sizeof(Triangle), 
+            cudaMemcpyDeviceToHost, stream);
         #ifdef VRT_DEBUG // print transformed triangles
         for (int j = 0; j < n_tri; j++) {
             std::cout << "\nTriangle " << j << "\tTexture: " << h_tris[i][j].material_id << std::endl;
@@ -339,7 +358,8 @@ int SceneLoader::load_scene(const std::string& filename) {
         #endif
     }
     // build bvh tree
-    std::cout << "\nBuilding BVH tree" << std::endl;
+    std::cout << "\nBuilding BVH tree... ";
+    int n_bvh_node_total = 0;
     for (int i = 0; i < n_objects_; i++) {
         auto& stream = streams[i % 4];
         int n_tri = objects_[i].n_triangles;
@@ -350,7 +370,9 @@ int SceneLoader::load_scene(const std::string& filename) {
         cudaMallocAsync(&objects_[i].bvh, n_bvh * sizeof(BVHNode), stream);
         cudaMemcpyAsync(objects_[i].bvh, bvh.data(), n_bvh * sizeof(BVHNode), cudaMemcpyHostToDevice, stream);        
         free(h_tris[i]);
+        n_bvh_node_total += n_bvh;
     }
+    std::cout << "Done. total " << n_bvh_node_total << " nodes" << std::endl;
     for (int i = 0; i < 4; i++) {
         cudaStreamSynchronize(streams[i]);
         cudaStreamDestroy(streams[i]);
@@ -358,6 +380,7 @@ int SceneLoader::load_scene(const std::string& filename) {
     cudaMalloc(&d_objects_, n_objects_ * sizeof(RenderObject));
     cudaMemcpy(d_objects_, objects_.data(), n_objects_ * sizeof(RenderObject), cudaMemcpyHostToDevice);
     // print all the materials
+    #ifdef VRT_DEBUG
     std::cout << "Materials:" << std::endl;
     for (size_t i = 0; i < materials_.size(); i++) {
         std::cout << "    Material " << i << ": " << material_type_str[materials_[i].type] << std::endl;
@@ -369,6 +392,7 @@ int SceneLoader::load_scene(const std::string& filename) {
             std::cout << "        Texture: Yes" << std::endl;
         }
     }
+    #endif
     // copy materials to device
     cudaMalloc(&d_materials_, materials_.size() * sizeof(Material));
     cudaMemcpy(d_materials_, materials_.data(), materials_.size() * sizeof(Material), cudaMemcpyHostToDevice);

@@ -22,6 +22,7 @@ struct RenderConfig {
     int width;
     int height;
     int n_samples;
+    int batch_size;
     float fov;
     float alpha;
     float russian_roulette;

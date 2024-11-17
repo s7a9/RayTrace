@@ -29,14 +29,15 @@ __forceinline__ __device__ float3 mmv3x3(float3& v, ROTATE_PARAMS) {
     );
 }
 
-__global__ void apply_transform_kernel(float scale, float3 translate, Triangle* triangles, int n_triangles, ROTATE_PARAMS) {
+__global__ void apply_transform_kernel(float3 scale, float3 translate, Triangle* triangles, int n_triangles, ROTATE_PARAMS) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= n_triangles) return;
     Triangle& tri = triangles[idx];
     #pragma unroll
     for (int i = 0; i < 3; i++) {
+        tri.v[i].position *= scale;
         tri.v[i].position = mmv3x3(tri.v[i].position, ROTATE_ARGS);
-        tri.v[i].position = tri.v[i].position * scale + translate;
+        tri.v[i].position += translate;
         tri.v[i].normal = mmv3x3(tri.v[i].normal, ROTATE_ARGS);
     }
 }
@@ -51,10 +52,11 @@ __host__ void apply_transform(const ModelTransform& transform, Triangle* triangl
     apply_transform_kernel<<<grid_size, block_size, 0, stream>>>(transform.scale, transform.translation, triangles, n_triangles, ROTATE_ARGS);
 }
 
-__global__ void apply_transform_vec_kernel(float scale, float3 translate, float3* vec, int n_vec, ROTATE_PARAMS) {
+__global__ void apply_transform_vec_kernel(float3 scale, float3 translate, float3* vec, int n_vec, ROTATE_PARAMS) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= n_vec) return;
-    vec[idx] = mmv3x3(vec[idx], ROTATE_ARGS) * scale + translate;
+    vec[idx] *= scale;
+    vec[idx] = mmv3x3(vec[idx], ROTATE_ARGS) + translate;
 }
 
 __host__ void apply_transform(const ModelTransform& transform, float3* vec, int n_vec, cudaStream_t stream) {

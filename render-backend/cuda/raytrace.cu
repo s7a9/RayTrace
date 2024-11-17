@@ -86,8 +86,10 @@ SUBROUTINE void triangle_interpolate(HitRecord& rec, const Material* materials) 
     if (material.cu_array == nullptr) {
         rec.color = material.albedo;
     } else {
-        float texcoord_x = w * rec.triangle->v[0].texcoord.x + u * rec.triangle->v[1].texcoord.x + v * rec.triangle->v[2].texcoord.x;
-        float texcoord_y = w * rec.triangle->v[0].texcoord.y + u * rec.triangle->v[1].texcoord.y + v * rec.triangle->v[2].texcoord.y;
+        float texcoord_x = w * rec.triangle->v[0].texcoord.x + u * rec.triangle->v[1].texcoord.x 
+            + v * rec.triangle->v[2].texcoord.x;
+        float texcoord_y = w * rec.triangle->v[0].texcoord.y + u * rec.triangle->v[1].texcoord.y 
+            + v * rec.triangle->v[2].texcoord.y;
         float4 texel = tex2D<float4>(material.tex_obj, texcoord_x, texcoord_y);
         rec.color = make_float3(texel.x, texel.y, texel.z);
     }
@@ -116,28 +118,48 @@ SUBROUTINE float schlick(float cosine, float ref_idx) {
 #define RAY(dir) Ray(rec.point + 1e-4f * dir, dir)
 
 SUBROUTINE bool material_scatter(
-    curandState* rand, const Material& material, const Ray& r, const HitRecord& rec, Ray& wo
+    curandState* rand, const Material& material, const Ray& r, const HitRecord& rec, 
+    Ray& wo, float3& color
 ) {
+    float3 direction;
     switch (material.type) {
     case Material::LAMBERTIAN: {
-        float3 direction;
         // turn the normal into same hemisphere as the ray direction
+        direction = rec.normal;
         if (dot3(r.direction, rec.normal) > 0.0f) {
-            direction = -rec.normal + random_in_unit_sphere3(rand);
-        } else {
-            direction = rec.normal + random_in_unit_sphere3(rand);
+            direction = -rec.normal;
         }
+        direction = normalize(direction + random_in_unit_sphere3(rand));
+        float cos_theta = abs(dot3(direction, rec.normal));
+        color *= rec.color * cos_theta;
         wo = RAY(direction);
         return true;
     }
     case Material::METAL: {
-        float3 direction = reflect(r.direction, rec.normal) 
-            + material.metal_fuzz * random_in_unit_sphere3(rand);
+        float3 normal = rec.normal;
+        // turn the normal into same hemisphere as the ray direction
+        if (dot3(r.direction, rec.normal) > 0.0f) {
+            normal = -rec.normal;
+        }
+        // float3 reflection = normalize(reflect(r.direction, normal)); 
+        // direction = normalize(reflection + material.metal_fuzz * random_in_unit_sphere3(rand));
+        // float cos_theta = abs(dot3(direction, reflection));
+        // color *= rec.color * cos_theta;
+        float3 random = random_in_unit_sphere3(rand);
+        if (4 * curand_uniform(rand) < 3 + material.metal_fuzz) { // same as lambertian
+            direction = normal + random;
+            float cos_theta = abs(dot3(direction, normal));
+            color *= rec.color * cos_theta;
+        } else { // pure reflection -> specular
+            direction = reflect(r.direction, normal);
+            direction = normalize(direction) + material.metal_fuzz * random;
+        }
         wo = RAY(direction);
-        return dot3(wo.direction, rec.normal) > 0.0f;
+        return true;
     }
     case Material::REFLECTIVE: {
         float3 direction = reflect(r.direction, rec.normal);
+        color *= rec.color;
         wo = RAY(direction);
         return true;
     }
@@ -164,6 +186,7 @@ SUBROUTINE bool material_scatter(
         if (curand_uniform(rand) < reflect_prob) {
             direction = reflect(r.direction, rec.normal);
         }
+        color *= rec.color;
         wo = RAY(direction);
         return true;
     }
@@ -196,28 +219,25 @@ __global__ void raytrace_kernel(
             break;
         }
         triangle_interpolate(rec, materials);
-        // debug: return abs normal as color
-        // color = make_float3(abs(rec.normal.x), abs(rec.normal.y), abs(rec.normal.z));
-        // break;
         auto& material = materials[rec.material_id];
         if (material.type == Material::LIGHT) {
             color *= rec.color;
             break;
         }
         else if (curand_uniform(rand) < russian_roulette) {
-            color *= rec.color;
             Ray new_ray;
-            if (!material_scatter(rand, material, ray, rec, new_ray)) {
+            if (!material_scatter(rand, material, ray, rec, new_ray, color)) {
+                color *= ambient;
                 break;
             }
-            color *= abs(dot3(new_ray.direction, rec.normal)); // Lambertian BRDF
             ray = new_ray;
         }
         else {
-            color = make_float3(0.0f, 0.0f, 0.0f);
+            color *= ambient;
             break;
         }
     }
+    if (max_depth < 0) return;
     // atmoically add the color to the output buffer
     int buffer_idx = i / spp;
     atomicAdd(&output_buffer[buffer_idx].x, color.x);
@@ -237,20 +257,19 @@ __global__ void post_process_kernel(int n_pixels, int spp, float alpha, float3* 
 
 __host__ void raytrace(
     curandState* randstate, int n_randstate, int spp,
-    int max_depth, float alpha, float3 ambient,  float russian_roulette,
+    int max_depth, float3 ambient, float russian_roulette,
     int n_rays, Ray* rays,
     int n_objects, const RenderObject* objects,
     int n_materials, const Material* materials,
     float3* output_buffer
 ) {
-    int block_size = 64, n_pixels = n_rays / spp;
+    int block_size = 64;
     int num_blocks = (n_rays + block_size - 1) / block_size;
     raytrace_kernel<<<num_blocks, block_size>>>(
         randstate, n_randstate, spp, ambient, max_depth, russian_roulette,
         n_rays, rays, n_objects, objects, n_materials, materials,
         output_buffer
     );
-    cudaDeviceSynchronize();
     // print the output buffer to file
     #ifdef VRT_DEBUG
     float3* output = new float3[n_pixels];
@@ -260,8 +279,12 @@ __host__ void raytrace(
     }
     delete[] output;
     #endif
-    block_size = 256;
-    num_blocks = (n_pixels + block_size - 1) / block_size;
+}
+
+
+__host__ void post_process(int n_pixels, int spp, float alpha, float3* output_buffer) {
+    int block_size = 256;
+    int num_blocks = (n_pixels + block_size - 1) / block_size;
     post_process_kernel<<<num_blocks, block_size>>>(
         n_pixels, spp, alpha, output_buffer
     );
