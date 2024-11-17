@@ -255,6 +255,8 @@ __global__ void post_process_kernel(int n_pixels, int spp, float gamma, float3* 
     output_buffer[i].z = min(1.0f, max(0.0f, output_buffer[i].z));
     // gamma correction
     output_buffer[i].x = pow(output_buffer[i].x, 1.0f / gamma);
+    output_buffer[i].y = pow(output_buffer[i].y, 1.0f / gamma);
+    output_buffer[i].z = pow(output_buffer[i].z, 1.0f / gamma);
 }
 
 __host__ void raytrace(

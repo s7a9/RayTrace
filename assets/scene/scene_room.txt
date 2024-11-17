@@ -1,0 +1,40 @@
+scene_config
+
+# light lambertian metal refractive reflective
+# https://free3d.com/3d-model/estanciacomedor-934763.html
+
+max_ray_depth 16
+max_surface 1000000
+camera_pos 600 100 -900
+camera_dir 1 0 1
+camera_up 0 1 0
+fov 60
+gamma 1
+size 1200 800
+sample_per_pixel 512
+background 0.05 0.05 0.05
+russian_roulette 0.9
+
+object
+    path ../assets/obj/57-estancia_comedor_obj/room.obj
+    mtldir ../assets/obj/57-estancia_comedor_obj
+    position 0 0 0
+    rotation 0 0 0
+    scale 1 1 1
+    albedo 1 1 1
+    type lambertian
+    metal_fuzz 0.2
+    optical_density 3
+    # simple_material
+end
+
+object
+    path ../assets/obj/simple/plane1.obj
+    position 693 290 -820
+    rotation 0 0 0
+    scale 164 0 160
+    albedo 1 1 1
+    type light
+end
+
+end

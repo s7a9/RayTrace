@@ -1,0 +1,68 @@
+scene_config
+
+# light lambertian metal refractive reflective
+# https://free3d.com/3d-model/futuristic-transport-shuttle-rigged--18765.html
+
+max_ray_depth 8
+max_surface 1000000
+camera_pos -4 7 2.5
+camera_dir 0.43 -1 -0.2
+camera_up 0 0 1
+fov 60
+gamma 1.2
+size 2000 1200
+sample_per_pixel 128
+background 0.01 0.01 0.01
+russian_roulette 0.9
+
+object
+    path ../assets/obj/shuttle/Transport Shuttle_obj.obj
+    mtldir ../assets/obj/shuttle
+    position 0 0 0
+    rotation 90 0 0
+    scale 1 1 1
+    albedo 1 1 1
+    type lambertian
+    metal_fuzz 0.2
+    optical_density 3
+    # simple_material
+end
+
+object
+    path ../assets/obj/simple/plane1.obj
+    position 0 0 8
+    rotation 90 0 0
+    scale 8 0 3
+    albedo 1.0 1.0 1.0
+    type light
+end
+
+object
+    path ../assets/obj/simple/plane1.obj
+    position 0 0 -100
+    rotation 90 0 0
+    scale 1e6 1e6 1e6
+    albedo 1.0 1.0 1.0
+    type lambertian
+end
+
+object
+    path ../assets/obj/simple/plane1.obj
+    position 0 8 3
+    rotation 0 0 0
+    scale 4 0 2
+    albedo 1.0 1.0 1.0
+    type light
+end
+
+
+object
+    path ../assets/obj/simple/plane1.obj
+    position -12 0 3
+    rotation 0 0 90
+    scale 2 0 2
+    albedo 1.0 1.0 1.0
+    type light
+end
+
+end

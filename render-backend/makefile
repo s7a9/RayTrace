@@ -20,6 +20,7 @@ clean:
 	rm -f $(OBJ_FILES) $(TARGET)
 
 $(TARGET): $(OBJ_FILES)
+	@mkdir -p $(@D)
 	nvcc $(CPPFLAGS) $(LDFLAGS) $(NVCCFLAGS) -o $@ $^
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp

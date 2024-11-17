@@ -1,0 +1,83 @@
+scene_config
+
+# light lambertian metal refractive reflective
+# https://free3d.com/3d-model/ferrari-formula-1-72527.html
+
+max_ray_depth 8
+max_surface 1000000
+camera_pos 240 -190 70
+camera_dir -1 0.49 -0.2
+camera_up 0 0 1
+fov 60
+gamma 1.8
+size 1600 900
+sample_per_pixel 128
+background 0.01 0.01 0.01
+russian_roulette 0.9
+
+object
+    path ../assets/obj/formula 1/Formula 1 mesh.obj
+    mtldir ../assets/obj/formula 1
+    position 0 0 0
+    rotation 90 100 0
+    scale 1 1 1
+    albedo 0.8 0.8 0.8
+    type refractive
+    metal_fuzz 0.1
+    optical_density 3
+    # simple_material
+end
+
+# ground
+object
+    path ../assets/obj/simple/plane1.obj
+    position 0 0 0
+    rotation 90 0 0
+    scale 1e3 1e3 1e3
+    albedo 1.0 1.0 1.0
+    type lambertian
+end
+
+# head light
+object
+    path ../assets/obj/simple/plane1.obj
+    position 0 -30 220
+    rotation 90 0 0
+    scale 40 0 80
+    albedo 1.0 1.0 1.0
+    type light
+end
+
+# left light
+object
+    path ../assets/obj/simple/plane1.obj
+    position 240 40 100
+    rotation 90 0 -80
+    # scale 20 0 60
+    scale 40 0 80
+    albedo 1 1 1
+    type light
+end
+
+# front light
+object
+    path ../assets/obj/simple/plane1.obj
+    position 60 -260 90
+    rotation -20 0 20
+    scale 75 0 75
+    albedo 1.0 1.0 1.0
+    type light
+end
+
+# end of config
+end 
+
+# back light
+object
+    path ../assets/obj/simple/plane1.obj
+    position -240 40 100
+    rotation 90 0 80
+    scale 100 0 200
+    albedo 1.0 1.0 1.0
+    type light
+end
