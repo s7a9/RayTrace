@@ -24,7 +24,7 @@ struct RenderConfig {
     int n_samples;
     int batch_size;
     float fov;
-    float alpha;
+    float gamma;
     float russian_roulette;
     float3 background;
     float3 camera_pos;

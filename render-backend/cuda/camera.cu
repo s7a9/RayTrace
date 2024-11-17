@@ -62,15 +62,6 @@ __host__ void setup_raytrace(
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
     setup_raytrace_kernel<<<grid, block>>>(state, width, height, spp, camera_pos, 
         lower_left, dx, dy, fov, rays);
-    // debug print rays
-    #ifdef VRT_DEBUG
-    Ray* h_rays = new Ray[width * height * spp];
-    cudaMemcpy(h_rays, rays, width * height * spp * sizeof(Ray), cudaMemcpyDeviceToHost);
-    for (int i = 0; i < width * height * spp; i++) {
-        // printf("%d: (%f, %f, %f) -> (%f, %f, %f)\n", i, h_rays[i].origin.x, h_rays[i].origin.y, h_rays[i].origin.z, h_rays[i].direction.x, h_rays[i].direction.y, h_rays[i].direction.z);
-    }
-    delete[] h_rays;
-    #endif
 }
 
 } // namespace vrt

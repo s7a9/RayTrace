@@ -104,7 +104,7 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
         // print a moving progress bar
         print_progress_bar(config.n_samples - n_sample_remain, config.n_samples, std::chrono::high_resolution_clock::now() - start);
     }
-    post_process(config.width * config.height, config.n_samples, config.alpha, d_buffer);
+    post_process(config.width * config.height, config.n_samples, config.gamma, d_buffer);
     std::cout << "---> done in ";
     // record end time
     auto end = std::chrono::high_resolution_clock::now();

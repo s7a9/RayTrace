@@ -245,14 +245,16 @@ __global__ void raytrace_kernel(
     atomicAdd(&output_buffer[buffer_idx].z, color.z);
 }
 
-__global__ void post_process_kernel(int n_pixels, int spp, float alpha, float3* output_buffer) {
+__global__ void post_process_kernel(int n_pixels, int spp, float gamma, float3* output_buffer) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n_pixels) return;
-    output_buffer[i] = output_buffer[i] * (alpha / spp);
+    output_buffer[i] = output_buffer[i] / (float)spp;
     // clamp the color
     output_buffer[i].x = min(1.0f, max(0.0f, output_buffer[i].x));
     output_buffer[i].y = min(1.0f, max(0.0f, output_buffer[i].y));
     output_buffer[i].z = min(1.0f, max(0.0f, output_buffer[i].z));
+    // gamma correction
+    output_buffer[i].x = pow(output_buffer[i].x, 1.0f / gamma);
 }
 
 __host__ void raytrace(
@@ -282,11 +284,11 @@ __host__ void raytrace(
 }
 
 
-__host__ void post_process(int n_pixels, int spp, float alpha, float3* output_buffer) {
+__host__ void post_process(int n_pixels, int spp, float gamma, float3* output_buffer) {
     int block_size = 256;
     int num_blocks = (n_pixels + block_size - 1) / block_size;
     post_process_kernel<<<num_blocks, block_size>>>(
-        n_pixels, spp, alpha, output_buffer
+        n_pixels, spp, gamma, output_buffer
     );
     cudaDeviceSynchronize();
 }

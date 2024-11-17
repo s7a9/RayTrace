@@ -14,7 +14,7 @@ __host__ void raytrace(
     float3* output_buffer
 );
 
-__host__ void post_process(int n_pixels, int spp, float alpha, float3* output_buffer);
+__host__ void post_process(int n_pixels, int spp, float gamma, float3* output_buffer);
 
 }
 

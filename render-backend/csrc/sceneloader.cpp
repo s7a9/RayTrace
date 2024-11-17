@@ -285,8 +285,8 @@ int SceneLoader::load_scene(const std::string& filename) {
             file >> config_.fov;
             config_.fov = config_.fov * M_PI / 180.0f;
         }
-        else if (config_key == "alpha") {
-            file >> config_.alpha;
+        else if (config_key == "gamma") {
+            file >> config_.gamma;
         }
         else if (config_key == "background") {
             file >> config_.background.x >> config_.background.y >> config_.background.z;
