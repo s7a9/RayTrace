@@ -1,0 +1,60 @@
+scene_config
+
+# light lambertian metal refractive reflective
+# https://www.artec3d.com/3d-models/lu-yu
+
+max_ray_depth 8
+max_surface 1000000
+camera_pos -280 0 190
+camera_dir 1 0 -0.26
+camera_up 0 0 1
+fov 60
+gamma 1
+size 1600 1600
+sample_per_pixel 256
+background 0 0 0
+russian_roulette 0.9
+
+object
+    path ../assets/obj/Lu Yu-obj/Lu Yu-obj.obj
+    position 0 0 0
+    rotation 0 0 0
+    scale 1 1 1
+    albedo 0.6 0.6 0.6
+    type metal
+    metal_fuzz 0.05
+    optical_density 3
+    simple_material
+end
+
+object
+    path ../assets/obj/simple/plane1.obj
+    position 0 0 400
+    rotation 90 0 0
+    scale 2e2 0 2e2
+    albedo 1.0 1.0 1.0
+    type light
+end
+
+object
+    path ../assets/obj/simple/box.obj
+    position 16.73 83.83 132
+    rotation 0 0 0
+    scale 20 20 20
+    albedo 1 0 0
+    type metal
+    metal_fuzz 0.1
+    optical_density 3
+    simple_material
+end
+
+object
+    path ../assets/obj/simple/plane1.obj
+    position 0 0 0
+    rotation 90 0 0
+    scale 1e6 1e6 1e6
+    albedo 1.0 1.0 1.0
+    type lambertian
+end
+
+end
