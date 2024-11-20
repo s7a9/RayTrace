@@ -5,60 +5,45 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <cmath>
 
 #include <opencv2/opencv.hpp>
 
 namespace vrt {
 
-float3 rotate(float3 v, float3 axis, float angle) {
-    float s = sin(angle);
-    float c = cos(angle);
-    float3 u = normalize(axis);
-    float3 ret;
-    ret.x = v.x * (c + (1 - c) * u.x * u.x) + v.y * ((1 - c) * u.x * u.y - s * u.z) + v.z * ((1 - c) * u.x * u.z + s * u.y);
-    ret.y = v.x * ((1 - c) * u.y * u.x + s * u.z) + v.y * (c + (1 - c) * u.y * u.y) + v.z * ((1 - c) * u.y * u.z - s * u.x);
-    ret.z = v.x * ((1 - c) * u.z * u.x - s * u.y) + v.y * ((1 - c) * u.z * u.y + s * u.x) + v.z * (c + (1 - c) * u.z * u.z);
-    return ret;
-}
-
-void update_config_state(RenderConfig& config, float3 delta_pos, float3 delta_rot) {
-    config.camera_pos += delta_pos;
-    // calculate new camera direction and up vector
-    float3 front = normalize(config.camera_dir);
-    float3 right = normalize(cross(front, config.camera_up));
-    float3 up = cross(right, front);
-    float3 new_front = front;
-    float3 new_up = up;
-    // rotate around right axis
-    float3 new_front_rot = rotate(front, right, delta_rot.y);
-    float3 new_up_rot = rotate(up, right, delta_rot.y);
-    // rotate around up axis
-    new_front = rotate(new_front_rot, up, delta_rot.x);
-    new_up = rotate(new_up_rot, up, delta_rot.x);
-    config.camera_dir = new_front;
-    config.camera_up = new_up;
-}
-
-void Worker::post_process_(float3* d_buffer) {
-    cv::Mat img(loader.config().height, loader.config().width, CV_32FC3);
-    cudaMemcpy(img.data, d_buffer, n_pixels_ * sizeof(float3), cudaMemcpyDeviceToHost);
-    cv::flip(img, img, 0); // flip image upside down
-    img.convertTo(img, CV_8UC3, 255.0f);
-    cv::cvtColor(img, img, cv::COLOR_RGB2BGR);
-    // construct filename using time
-    // auto now = std::chrono::system_clock::now();
-    // auto now_c = std::chrono::system_clock::to_time_t(now);
-    std::lock_guard<std::mutex> lock(output_mutex);
-    char time_string[MaxFilenameLength] = "output";
-    int n;
-    // n = strftime(time_string, MaxFilenameLength, "%Y-%m-%d-%H-%M-%S", std::localtime(&now_c));
-    n = snprintf(output_filename, MaxFilenameLength, "%s/%s-%s.png", output_dir.c_str(), scene_name.c_str(), time_string);
-    if (n >= MaxFilenameLength) {
-        std::cerr << "Filename too long" << std::endl;
-        return;
+void Worker::post_process_loop_() {
+    while (!should_exit.load()) {
+        if (!has_new_output.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+        cv::Mat img(loader.config().height, loader.config().width, CV_32FC3);
+        {
+            std::lock_guard<std::mutex> lock(buffer_mutex);
+            memcpy(img.data, h_buffer_, n_pixels_ * sizeof(float3));
+        }
+        cv::flip(img, img, 0); // flip image upside down
+        img.convertTo(img, CV_8UC3, 255.0f);
+        cv::cvtColor(img, img, cv::COLOR_RGB2BGR);
+        // construct filename using time
+        // auto now = std::chrono::system_clock::now();
+        // auto now_c = std::chrono::system_clock::to_time_t(now);
+        {
+            std::lock_guard<std::mutex> lock(filename_mutex);
+            char time_string[MaxFilenameLength] = "output";
+            int n;
+            // n = strftime(time_string, MaxFilenameLength, "%Y-%m-%d-%H-%M-%S", std::localtime(&now_c));
+            n = snprintf(output_filename, MaxFilenameLength, "%s/%s-%s.png", output_dir.c_str(), scene_name.c_str(), time_string);
+            if (n >= MaxFilenameLength) {
+                std::cerr << "Filename too long" << std::endl;
+                return;
+            }
+            std::cout << "Image saved to " << output_filename << std::endl;
+            cv::imwrite(output_filename, img);
+        }
+        has_new_output.store(false);
     }
-    std::cout << "Image saved to " << output_filename << std::endl;
-    cv::imwrite(output_filename, img);
+    std::cout << "encoder: cleaning up" << std::endl;
 }
 
 void print_progress_bar(int current, int total, std::chrono::duration<float> elapsed) {
@@ -109,21 +94,32 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
     // record end time
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms <---" << std::endl;
-    post_process_(d_buffer);
+    // post_process_(d_buffer);
 }
 
 void Worker::run_loop_() {
+    float3* h_buffer = new float3[n_pixels_];
     while (!should_exit.load()) {
-        if (has_new_input.load()) {
-            render_(d_buffer_, d_rays_); // leave for double buffering
-            has_new_input.store(false);
+        if (!has_new_input.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        render_(d_buffer_, d_rays_); // leave for double buffering
+        cudaMemcpy(h_buffer, d_buffer_, n_pixels_ * sizeof(float3), cudaMemcpyDeviceToHost);
+        cudaDeviceSynchronize();
+        {
+            std::lock_guard<std::mutex> lock(buffer_mutex);
+            std::swap(h_buffer_, h_buffer);
+        }
+        has_new_output.store(true);
+        has_new_input.store(false);
     }
+    std::cout << "worker: cleaning up" << std::endl;
+    delete[] h_buffer;
 }
 
 Worker::Worker(const std::string& scene_file, const std::string& output_dir, int batch_size) : 
-    should_exit(false), has_new_input(false), output_dir(output_dir) {
+    should_exit(false), has_new_input(false), has_new_output(false), output_dir(output_dir) {
     output_filename[0] = '\0';
     if (loader.load_scene(scene_file) != 0) {
         std::cerr << "Failed to load scene file " << scene_file << std::endl;
@@ -161,22 +157,49 @@ Worker::Worker(const std::string& scene_file, const std::string& output_dir, int
     pos = (pos == std::string::npos) ? 0 : pos + 1;
     scene_name = scene_file.substr(pos, scene_file.find_last_of('.') - pos);
     std::cout << "worker: loaded scene: " << scene_name << std::endl;
+    // allocate host memory for buffer
+    h_buffer_ = new float3[n_pixels_];
+    // copy camera position and direction
+    initial_cam_pos = config.camera_pos;
+    initial_cam_dir = config.camera_dir;
+    initial_cam_up = config.camera_up;
 }
 
 Worker::~Worker() {
     should_exit.store(true);
     render_thread.join();
+    encode_thread.join();
     cudaFree(d_buffer_);
     cudaFree(d_rays_);
     cudaFree(d_rand_state_);
+    delete[] h_buffer_;
 }
 
 void Worker::run() {
     render_thread = std::thread(&Worker::run_loop_, this);
+    encode_thread = std::thread(&Worker::post_process_loop_, this);
 }
 
-void Worker::update_camera(float3 delta_pos, float3 delta_rot) {
-    update_config_state(loader.config(), delta_pos, delta_rot);
+void Worker::reset_camera() {
+    auto& config = loader.config();
+    config.camera_pos = initial_cam_pos;
+    config.camera_dir = initial_cam_dir;
+    config.camera_up = initial_cam_up;
+    has_new_input.store(true);
+}
+
+void Worker::update_camera(float3 pos, float3 rot) {
+    auto& config = loader.config();
+    config.camera_pos = pos;
+    // calculate camera direction by phone rotation z-alpha, x-beta, y-gamma
+    // discard original camera direction
+    rot *= 0.0174532925f; // convert to radians
+    float cos_alpha = cos(rot.x), sin_alpha = sin(rot.x);
+    float cos_beta = cos(rot.y);
+    float3 dir = make_float3(cos_alpha, sin_alpha, -cos_beta);
+    float3 up = make_float3(0.0f, 0.0f, 1.0f);
+    config.camera_up = up;
+    config.camera_dir = dir;
     has_new_input.store(true);
 }
 

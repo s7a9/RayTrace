@@ -22,19 +22,21 @@ class Worker {
     SceneLoader loader;
     std::atomic_bool should_exit;
     std::atomic_bool has_new_input;
+    std::atomic_bool has_new_output;
     char output_filename[MaxFilenameLength];
-    std::thread render_thread;
+    std::thread render_thread, encode_thread;
     float3* d_buffer_;
-    std::unique_ptr<float3*> h_buffer_;
+    float3* h_buffer_;
     Ray* d_rays_;
     curandState* d_rand_state_;
     size_t n_pixels_;
     size_t n_rays_;
-    std::mutex output_mutex;
+    std::mutex filename_mutex, buffer_mutex;
     std::string output_dir;
     std::string scene_name;
+    float3 initial_cam_pos, initial_cam_dir, initial_cam_up;
 
-    void post_process_(float3* d_buffer);
+    void post_process_loop_();
 
     void render_(float3* d_buffer, Ray* d_rays);
 
@@ -51,9 +53,14 @@ public:
 
     void update_camera(float3 delta_pos, float3 delta_rot);
 
-    // causion: need to free the memory after use
+    void force_render() { has_new_input.store(true); }
+
+    void reset_camera();
+
+    RenderConfig& config() { return loader.config(); }
+
     void get_output_filename(char filename[MaxFilenameLength]) {
-        std::lock_guard<std::mutex> lock(output_mutex);
+        std::lock_guard<std::mutex> lock(filename_mutex);
         strcpy(filename, output_filename);
     }
 };

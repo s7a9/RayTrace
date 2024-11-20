@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iPhone Camera Update</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #efefef;
+        }
+        img {
+            width: 90%;
+            max-width: 500px;
+            border: 2px solid #000000;
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        .button-container {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Virtual Reality-Ray Trace</h1>
+    <div class="button-container">
+        <button id="start-button">Start Sharing Location</button>
+        <button id="reset-button">Reset Position</button>
+    </div>
+    <div class="button-container">
+        <button id="reset-velocity-button">Reset Velocity</button>
+        <button id="fix-position-button">Fix Position</button>
+    </div>
+    <img id="image" src="" alt="Loading image...">
+
+    <script>
+        let initialPosition = { x: 0, y: 0, z: 0 }; // Initial position
+        let position = { x: 0, y: 0, z: 0 }; // Current position
+        let velocity = { x: 0, y: 0, z: 0 }; // Current velocity
+        let orientation = { alpha: 0, beta: 0, gamma: 0 }; // Current orientation
+        let lastAcceleration = { x: 0, y: 0, z: 0 }; // Last acceleration in world coordinates
+        let lastUpdate = Date.now();
+        let updateIntervalId = null;
+        let fixPosition = false;
+
+        // Function to fetch initial camera position from the server
+        async function fetchInitialPosition() {
+            try {
+                const response = await fetch('/camera-pos');
+                if (!response.ok) {
+                    throw new Error(`Server responded with status ${response.status}`);
+                }
+                const text = await response.text();
+                const parts = text.trim().split(',');
+                position.x = parseFloat(parts[0]);
+                position.y = parseFloat(parts[1]);
+                position.z = parseFloat(parts[2]);
+                initialPosition = { ...position };
+                console.log('Initial camera position:', position);
+            } catch (error) {
+                console.error('Error fetching initial position:', error);
+                alert('Failed to fetch initial camera position.');
+            }
+        }
+
+        // Function to rotate acceleration from phone to world coordinates
+        function rotateAcceleration(acc, orient) {
+            const alpha = orient.alpha ? orient.alpha * (Math.PI / 180) : 0; // Z axis
+            const beta = orient.beta ? orient.beta * (Math.PI / 180) : 0;    // X axis
+            const gamma = orient.gamma ? orient.gamma * (Math.PI / 180) : 0; // Y axis
+
+            // Rotation matrices
+            const Rz = [
+                [Math.cos(alpha), -Math.sin(alpha), 0],
+                [Math.sin(alpha), Math.cos(alpha), 0],
+                [0, 0, 1]
+            ];
+
+            const Rx = [
+                [1, 0, 0],
+                [0, Math.cos(beta), -Math.sin(beta)],
+                [0, Math.sin(beta), Math.cos(beta)]
+            ];
+
+            const Ry = [
+                [Math.cos(gamma), 0, Math.sin(gamma)],
+                [0, 1, 0],
+                [-Math.sin(gamma), 0, Math.cos(gamma)]
+            ];
+
+            // Combine rotations: R = Rz * Rx * Ry
+            const Rzx = multiplyMatrices(Rz, Rx);
+            const R = multiplyMatrices(Rzx, Ry);
+
+            // Apply rotation
+            const rotated = {
+                x: R[0][0] * acc.x + R[0][1] * acc.y + R[0][2] * acc.z,
+                y: R[1][0] * acc.x + R[1][1] * acc.y + R[1][2] * acc.z,
+                z: R[2][0] * acc.x + R[2][1] * acc.y + R[2][2] * acc.z
+            };
+
+            return rotated;
+        }
+
+        // Helper function to multiply two 3x3 matrices
+        function multiplyMatrices(a, b) {
+            const result = [];
+            for (let i = 0; i < 3; i++) {
+                result[i] = [];
+                for (let j = 0; j < 3; j++) {
+                    result[i][j] = 0;
+                    for (let k = 0; k < 3; k++) {
+                        result[i][j] += a[i][k] * b[k][j];
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Function to handle motion data
+        function handleMotion(event) {
+            const now = Date.now();
+            const deltaTime = (now - lastUpdate) / 1000.0; // Time in seconds since last update
+            lastUpdate = now;
+
+            // Get acceleration in phone coordinates, ignoring gravity
+            let acc = {
+                x: event.acceleration ? event.acceleration.x || 0 : 0,
+                y: event.acceleration ? event.acceleration.y || 0 : 0,
+                z: event.acceleration ? event.acceleration.z || 0 : 0
+            };
+
+            // Optionally, you might want to subtract gravity if using acceleration
+            // Here, for simplicity, we proceed without adjusting for gravity
+
+            // Rotate acceleration to world coordinates
+            const rotatedAcc = rotateAcceleration(acc, orientation);
+
+            // Integrate acceleration to velocity
+            velocity.x += rotatedAcc.x * deltaTime;
+            velocity.y += rotatedAcc.y * deltaTime;
+            velocity.z += rotatedAcc.z * deltaTime;
+
+            if (!fixPosition) {
+                // Integrate velocity to position
+                position.x += velocity.x * deltaTime;
+                position.y += velocity.y * deltaTime;
+                position.z += velocity.z * deltaTime;
+            }
+
+            console.log(`Position updated: (${position.x.toFixed(3)}, ${position.y.toFixed(3)}, ${position.z.toFixed(3)})`);
+        }
+
+        // Function to handle orientation data
+        function handleOrientation(event) {
+            orientation.alpha = event.alpha || 0; // Rotation around z-axis
+            orientation.beta = event.beta || 0;   // Rotation around x-axis
+            orientation.gamma = event.gamma || 0; // Rotation around y-axis
+        }
+
+        // Start sending data to the server
+        async function startUpdating() {
+            // Fetch initial position from the server
+            await fetchInitialPosition();
+
+            // Request permission for motion and orientation events
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                const permission = await DeviceMotionEvent.requestPermission();
+                if (permission !== 'granted') {
+                    alert("Permission denied to access motion data.");
+                    return;
+                }
+            }
+
+            // Add event listeners for motion and orientation
+            window.addEventListener('devicemotion', handleMotion);
+            window.addEventListener('deviceorientation', handleOrientation);
+
+            // Start sending position and orientation updates every 100 milliseconds
+            updateIntervalId = setInterval(() => {
+                // Prepare data to send
+                const data = `${position.x.toFixed(3)},${position.y.toFixed(3)},${position.z.toFixed(3)},` +
+                             `${orientation.alpha.toFixed(3)},${orientation.beta.toFixed(3)},${orientation.gamma.toFixed(3)}`;
+
+                // Send the data to the server via POST to /update-camera
+                fetch('/update-camera', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain'
+                    },
+                    body: data
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Server responded with status ${response.status}`);
+                    }
+                    // Optionally handle server response
+                })
+                .catch(err => console.error('Error sending update to camera:', err));
+            }, 100); // 100 ms interval
+        }
+
+        // Function to reset position and velocity
+        async function resetPosition() {
+            try {
+                await fetch('/reset-camera', {
+                    method: 'POST'
+                });
+                // Reset position and velocity to 0
+                position = { ...initialPosition };
+                velocity = { x: 0, y: 0, z: 0 };
+                console.log('Position and velocity have been reset.');
+            } catch (err) {
+                console.error('Error resetting position:', err);
+                alert("Failed to reset position.");
+            }
+        }
+
+        // Function to reset velocity
+        function resetVelocity() {
+            velocity = { x: 0, y: 0, z: 0 };
+            console.log('Velocity has been reset.');
+        }
+
+        // Function to update the image without flicker
+        function updateImage() {
+            const image = document.getElementById('image');
+            const newImage = new Image();
+
+            newImage.src = `/image?timestamp=${Date.now()}`;
+            newImage.onload = () => {
+                image.src = newImage.src; // Replace the image source only after the new image is loaded
+            };
+        }
+
+        // Set up image update at 10 times per second
+        setInterval(updateImage, 100);
+
+        // Button to start sharing location
+        document.getElementById('start-button').addEventListener('click', startUpdating);
+
+        // Button to reset position
+        document.getElementById('reset-button').addEventListener('click', resetPosition);
+
+        // Button to reset velocity
+        document.getElementById('reset-velocity-button').addEventListener('click', resetVelocity);
+
+        // Button to fix position
+        document.getElementById('fix-position-button').addEventListener('click', () => {
+            fixPosition = !fixPosition;
+            console.log(`Position ${fixPosition ? 'fixed' : 'not fixed'}.`);
+        });
+    </script>
+</body>
+</html>
