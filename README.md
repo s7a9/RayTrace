@@ -31,7 +31,7 @@ This project is developed and tested on linux systems, but with proper include f
 
 ### Build
 
-Run `make -j -B` under folder `render-backend`.
+Run `make -j -B`.
 
 ### Run
 
