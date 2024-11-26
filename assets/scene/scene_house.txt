@@ -11,13 +11,13 @@ camera_up 0 0 1
 fov 45
 gamma 1
 size 600 600
-sample_per_pixel 2048
+sample_per_pixel 32
 background 0.05 0.05 0.05
 russian_roulette 0.9
 
 object
-    path ../assets/obj/Bambo_House_obj/Bambo_House.obj
-    mtldir ../assets/obj/Bambo_House_obj
+    path assets/obj/Bambo_House_obj/Bambo_House.obj
+    mtldir assets/obj/Bambo_House_obj
     position 0 -2 -0.2
     rotation 90 36 0
     scale 0.4 0.4 0.4
@@ -29,7 +29,7 @@ object
 end
 
 object
-    path ../assets/obj/simple/plane1.obj
+    path assets/obj/simple/plane1.obj
     position 0 0 100
     rotation 90 0 0
     scale 1e6 1e6 1e6
@@ -38,7 +38,7 @@ object
 end
 
 object
-    path ../assets/obj/simple/plane1.obj
+    path assets/obj/simple/plane1.obj
     position 0 0 -100
     rotation 90 0 0
     scale 1e6 1e6 1e6

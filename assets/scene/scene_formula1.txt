@@ -11,13 +11,13 @@ camera_up 0 0 1
 fov 60
 gamma 1.8
 size 1600 900
-sample_per_pixel 128
+sample_per_pixel 2048
 background 0.01 0.01 0.01
 russian_roulette 0.9
 
 object
-    path ../assets/obj/formula 1/Formula 1 mesh.obj
-    mtldir ../assets/obj/formula 1
+    path assets/obj/formula 1/Formula 1 mesh.obj
+    mtldir assets/obj/formula 1
     position 0 0 0
     rotation 90 100 0
     scale 1 1 1
@@ -30,7 +30,7 @@ end
 
 # ground
 object
-    path ../assets/obj/simple/plane1.obj
+    path assets/obj/simple/plane1.obj
     position 0 0 0
     rotation 90 0 0
     scale 1e3 1e3 1e3
@@ -40,7 +40,7 @@ end
 
 # head light
 object
-    path ../assets/obj/simple/plane1.obj
+    path assets/obj/simple/plane1.obj
     position 0 -30 220
     rotation 90 0 0
     scale 40 0 80
@@ -50,7 +50,7 @@ end
 
 # left light
 object
-    path ../assets/obj/simple/plane1.obj
+    path assets/obj/simple/plane1.obj
     position 240 40 100
     rotation 90 0 -80
     # scale 20 0 60
@@ -61,7 +61,7 @@ end
 
 # front light
 object
-    path ../assets/obj/simple/plane1.obj
+    path assets/obj/simple/plane1.obj
     position 60 -260 90
     rotation -20 0 20
     scale 75 0 75
@@ -74,7 +74,7 @@ end
 
 # back light
 object
-    path ../assets/obj/simple/plane1.obj
+    path assets/obj/simple/plane1.obj
     position -240 40 100
     rotation 90 0 80
     scale 100 0 200

@@ -190,7 +190,8 @@ void Worker::reset_camera() {
 
 void Worker::update_camera(float3 pos, float3 rot) {
     auto& config = loader.config();
-    config.camera_pos = pos;
+    // config.camera_pos = pos;
+    config.camera_pos = initial_cam_pos;
     // calculate camera direction by phone rotation z-alpha, x-beta, y-gamma
     // discard original camera direction
     rot *= 0.0174532925f; // convert to radians

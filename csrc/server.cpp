@@ -23,19 +23,19 @@ int main(int argc, char** argv) {
     int batch_size = atoi(argv[2]);
     std::string address = argv[3];
     int port = atoi(argv[4]);
-    std::string output_dir = "../assets/static";
-    std::string index_file = "../assets/static/index.html";
+    std::string output_dir = "./assets/static";
+    std::string index_file = "./assets/static/index.html";
     vrt::Worker worker(scene_file, output_dir, batch_size);
     worker.run();
 
     // ignore sigpipe
     signal(SIGPIPE, sigpipe_handler);
 
-    worker.update_camera(make_float3(0.0f, 0.0f, 0.0f), make_float3(0.0f, 0.0f, 0.0f));
+    worker.force_render();
 
     using namespace httplib;
-    SSLServer svr("./bin/cert.pem", "./bin/key.pem");
-    // Server svr;
+    // SSLServer svr("./bin/cert.pem", "./bin/key.pem");
+    Server svr;
 
     svr.Get("/", [index_file](__attribute_maybe_unused__ const Request& req, Response& res) {
         std::ifstream file(index_file);
@@ -106,6 +106,7 @@ int main(int argc, char** argv) {
         res.set_content("Server stopped", "text/plain");
     });
 
+    std::cout << "Starting server at " << address << ":" << port << std::endl;
     if (!svr.listen(address, port)) {
         std::cerr << "Failed to start server" << std::endl;
         return 1;

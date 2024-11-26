@@ -10,7 +10,7 @@ TARGET := bin/main bin/server
 TARGET_OBJ := $(patsubst bin/%,$(OBJ_DIR)/%.o,$(TARGET))
 DEPENDOBJ_FILES := $(filter-out $(TARGET_OBJ),$(OBJ_FILES))
 CPPFLAGS := -I./include -I/usr/local/cuda/include -I./third $(shell pkg-config --cflags opencv4) #-DVRT_DEBUG
-CXXFLAGS := -std=c++17 -Wall -Wextra -Werror -pedantic -O3 -march=native -mtune=native -fopenmp
+CXXFLAGS := -std=c++17 -Wall -Wextra -pedantic -O3 -march=native -mtune=native -fopenmp
 NVCCFLAGS := -std=c++17 -O3 -arch=native -Xcompiler -fopenmp -dopt on
 LDFLAGS := $(shell pkg-config --libs opencv4 openssl)
 
