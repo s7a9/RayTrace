@@ -12,7 +12,7 @@
 namespace vrt {
 
 void Worker::post_process_loop_() {
-    while (!should_exit.load()) {
+    while (!should_exit.load() || has_new_input.load() || has_new_output.load()) {
         if (!has_new_output.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
