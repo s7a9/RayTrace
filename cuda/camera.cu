@@ -22,7 +22,7 @@ __host__ void init_randstate(curandState** state, int width, int height) {
 
 __global__ void setup_raytrace_kernel(
     curandState *state,
-    int width, int height, int spp,
+    int width, int height,
     float3 camera_pos, float3 lower_left, float3 dx, float3 dy,
     float fov, Ray* rays
 ) {
@@ -32,18 +32,17 @@ __global__ void setup_raytrace_kernel(
     if (x >= width || y >= height) return;
     // make camera vectors
     // split the screen into width x height pixels
-    // sample spp rays per at pixel (x, y)
-    for (int i = 0; i < spp; i++) {
-        float u = (x + curand_uniform(&state[idx])) / (float)width;
-        float v = (y + curand_uniform(&state[idx])) / (float)height;
-        float3 ray_dir = normalize(lower_left + u * dx + v * dy);
-        rays[idx * spp + i] = Ray(camera_pos, ray_dir);
-    }
+    // float u = (x + curand_uniform(&state[idx])) / (float)width;
+    // float v = (y + curand_uniform(&state[idx])) / (float)height;
+    float u = (x + 0.5f) / (float)width;
+    float v = (y + 0.5f) / (float)height;
+    float3 ray_dir = normalize(lower_left + u * dx + v * dy);
+    rays[idx] = Ray(camera_pos, ray_dir);
 }
 
 __host__ void setup_raytrace(
     curandState *state,
-    int width, int height, int spp, 
+    int width, int height,
     float3 camera_pos, float3 camera_dir, float3 camera_up, float fov,
     Ray* rays
 ) {
@@ -60,7 +59,7 @@ __host__ void setup_raytrace(
     float3 dy = 2.0f * half_height * camera_up;
     dim3 block(16, 16);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
-    setup_raytrace_kernel<<<grid, block>>>(state, width, height, spp, camera_pos, 
+    setup_raytrace_kernel<<<grid, block>>>(state, width, height, camera_pos, 
         lower_left, dx, dy, fov, rays);
 }
 

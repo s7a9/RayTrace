@@ -195,7 +195,7 @@ SUBROUTINE bool material_scatter(
 }
 
 __global__ void raytrace_kernel(
-    curandState* randstate, int n_randstate, int spp, float3 ambient,
+    curandState* randstate, int n_pixel, int spp, float3 ambient,
     int max_depth, float russian_roulette,
     int n_rays, Ray* rays,
     int n_objects, const RenderObject* objects,
@@ -204,45 +204,47 @@ __global__ void raytrace_kernel(
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n_rays) return;
-    curandState* rand = &randstate[i % n_randstate];
-    Ray ray = rays[i];
-    float3 color = make_float3(1.0f, 1.0f, 1.0f);
-    while (max_depth--) {
-        HitRecord rec;
-        rec.t = INFINITY;
-        bool hit = false;
-        for (int j = 0; j < n_objects; j++) {
-            hit |= object_intersect(objects[j], ray, rec);
-        }
-        if (!hit) {
-            color *= ambient;
-            break;
-        }
-        triangle_interpolate(rec, materials);
-        auto& material = materials[rec.material_id];
-        if (material.type == Material::LIGHT) {
-            color *= rec.color;
-            break;
-        }
-        else if (curand_uniform(rand) < russian_roulette) {
-            Ray new_ray;
-            if (!material_scatter(rand, material, ray, rec, new_ray, color)) {
+    curandState* rand = &randstate[i % n_pixel];
+    while (spp--) {
+        Ray ray = rays[i];
+        float3 color = make_float3(1.0f, 1.0f, 1.0f);
+        int depth = max_depth;
+        while (depth--) {
+            HitRecord rec;
+            rec.t = INFINITY;
+            bool hit = false;
+            for (int j = 0; j < n_objects; j++) {
+                hit |= object_intersect(objects[j], ray, rec);
+            }
+            if (!hit) {
                 color *= ambient;
                 break;
             }
-            ray = new_ray;
+            triangle_interpolate(rec, materials);
+            auto& material = materials[rec.material_id];
+            if (material.type == Material::LIGHT) {
+                color *= rec.color;
+                break;
+            }
+            else if (curand_uniform(rand) < russian_roulette) {
+                Ray new_ray;
+                if (!material_scatter(rand, material, ray, rec, new_ray, color)) {
+                    color *= ambient;
+                    break;
+                }
+                ray = new_ray;
+            }
+            else {
+                color *= ambient;
+                break;
+            }
         }
-        else {
-            color *= ambient;
-            break;
-        }
+        if (depth < 0) continue;
+        // atmoically add the color to the output buffer;
+        atomicAdd(&output_buffer[i].x, color.x);
+        atomicAdd(&output_buffer[i].y, color.y);
+        atomicAdd(&output_buffer[i].z, color.z);
     }
-    if (max_depth < 0) return;
-    // atmoically add the color to the output buffer
-    int buffer_idx = i / spp;
-    atomicAdd(&output_buffer[buffer_idx].x, color.x);
-    atomicAdd(&output_buffer[buffer_idx].y, color.y);
-    atomicAdd(&output_buffer[buffer_idx].z, color.z);
 }
 
 __global__ void post_process_kernel(int n_pixels, int spp, float gamma, float3* output_buffer) {
@@ -260,7 +262,7 @@ __global__ void post_process_kernel(int n_pixels, int spp, float gamma, float3* 
 }
 
 __host__ void raytrace(
-    curandState* randstate, int n_randstate, int spp,
+    curandState* randstate, int n_pixel, int spp,
     int max_depth, float3 ambient, float russian_roulette,
     int n_rays, Ray* rays,
     int n_objects, const RenderObject* objects,
@@ -270,7 +272,7 @@ __host__ void raytrace(
     int block_size = 64;
     int num_blocks = (n_rays + block_size - 1) / block_size;
     raytrace_kernel<<<num_blocks, block_size>>>(
-        randstate, n_randstate, spp, ambient, max_depth, russian_roulette,
+        randstate, n_pixel, spp, ambient, max_depth, russian_roulette,
         n_rays, rays, n_objects, objects, n_materials, materials,
         output_buffer
     );

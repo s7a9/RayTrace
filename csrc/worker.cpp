@@ -68,14 +68,14 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
     std::cout << "---> Raytracing Start <---" << std::endl;
     int n_sample_remain = config.n_samples;
     cudaMemset(d_buffer, 0, n_pixels_ * sizeof(float3));
+    setup_raytrace(
+        d_rand_state_, config.width, config.height,
+        config.camera_pos, config.camera_dir, config.camera_up, config.fov,
+        d_rays
+    );
+    cudaDeviceSynchronize();
     while (n_sample_remain > 0) {
         int n_sample = std::min(n_sample_remain, config.batch_size);
-        setup_raytrace(
-            d_rand_state_, config.width, config.height, n_sample,
-            config.camera_pos, config.camera_dir, config.camera_up, config.fov,
-            d_rays
-        );
-        cudaDeviceSynchronize();
         raytrace(
             d_rand_state_, config.width * config.height, n_sample,
             config.max_depth, config.background, config.russian_roulette,
@@ -94,7 +94,6 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
     // record end time
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms <---" << std::endl;
-    // post_process_(d_buffer);
 }
 
 void Worker::run_loop_() {
@@ -128,16 +127,11 @@ Worker::Worker(const std::string& scene_file, const std::string& output_dir, int
     auto& config = loader.config();
     if (batch_size <= 0 || batch_size > config.n_samples) {
         batch_size = config.n_samples;
-    } else if (config.n_samples % batch_size != 0) {
-        std::cerr << "Warning: batch size " << batch_size 
-            << " is not a divisor of sample per pixel " << config.n_samples << std::endl;
-        std::cerr << "Setting batch size to spp, which may cause CUDA OOM." << std::endl;
-        batch_size = config.n_samples;
     }
     config.batch_size = batch_size;
     init_randstate(&d_rand_state_, config.width, config.height);
     n_pixels_ = config.width * config.height;
-    n_rays_ = n_pixels_ * config.batch_size;
+    n_rays_ = n_pixels_;
     // malloc device memory and detect OOM error
     auto err = cudaMalloc(&d_buffer_, n_pixels_ * sizeof(float3));
     if (err != cudaSuccess) {

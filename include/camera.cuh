@@ -10,7 +10,7 @@ __host__ void init_randstate(curandState** state, int width, int height);
 
 __host__ void setup_raytrace(
     curandState *state,
-    int width, int height, int spp, 
+    int width, int height,
     float3 camera_pos, float3 camera_dir, float3 camera_up, float fov,
     Ray* rays
 );

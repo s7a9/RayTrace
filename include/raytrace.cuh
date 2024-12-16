@@ -6,7 +6,7 @@
 namespace vrt {
 
 __host__ void raytrace(
-    curandState* randstate, int n_randstate, int spp,
+    curandState* randstate, int n_pixel, int spp,
     int max_depth, float3 ambient, float russian_roulette,
     int n_rays, Ray* rays,
     int n_objects, const RenderObject* objects,
