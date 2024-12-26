@@ -55,8 +55,44 @@
         let lastUpdate = Date.now();
         let updateIntervalId = null;
         let fixPosition = false;
+        let isTracking = false;
 
-        // Function to fetch initial camera position from the server
+        // Function to check if the device supports motion events
+        function checkDeviceSupport() {
+            return new Promise((resolve, reject) => {
+                if (window.DeviceMotionEvent && window.DeviceOrientationEvent) {
+                    resolve(true);
+                } else {
+                    reject('Device motion and orientation not supported on this device');
+                }
+            });
+        }
+
+        // Function to request permissions based on platform
+        async function requestPermissions() {
+            try {
+                // Check if it's an iOS device (iPhone, iPad)
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    // iOS 13+ device
+                    const motionPermission = await DeviceMotionEvent.requestPermission();
+                    const orientationPermission = await DeviceOrientationEvent.requestPermission();
+                    
+                    if (motionPermission === 'granted' && orientationPermission === 'granted') {
+                        return true;
+                    } else {
+                        throw new Error('Permission denied');
+                    }
+                } else {
+                    // Android device or older iOS - no explicit permission needed
+                    return true;
+                }
+            } catch (error) {
+                console.error('Error requesting permissions:', error);
+                throw error;
+            }
+        }
+
+        // Rest of the functions remain the same
         async function fetchInitialPosition() {
             try {
                 const response = await fetch('/camera-pos');
@@ -76,13 +112,11 @@
             }
         }
 
-        // Function to rotate acceleration from phone to world coordinates
         function rotateAcceleration(acc, orient) {
-            const alpha = orient.alpha ? orient.alpha * (Math.PI / 180) : 0; // Z axis
-            const beta = orient.beta ? orient.beta * (Math.PI / 180) : 0;    // X axis
-            const gamma = orient.gamma ? orient.gamma * (Math.PI / 180) : 0; // Y axis
+            const alpha = orient.alpha ? orient.alpha * (Math.PI / 180) : 0;
+            const beta = orient.beta ? orient.beta * (Math.PI / 180) : 0;
+            const gamma = orient.gamma ? orient.gamma * (Math.PI / 180) : 0;
 
-            // Rotation matrices
             const Rz = [
                 [Math.cos(alpha), -Math.sin(alpha), 0],
                 [Math.sin(alpha), Math.cos(alpha), 0],
@@ -101,21 +135,16 @@
                 [-Math.sin(gamma), 0, Math.cos(gamma)]
             ];
 
-            // Combine rotations: R = Rz * Rx * Ry
             const Rzx = multiplyMatrices(Rz, Rx);
             const R = multiplyMatrices(Rzx, Ry);
 
-            // Apply rotation
-            const rotated = {
+            return {
                 x: R[0][0] * acc.x + R[0][1] * acc.y + R[0][2] * acc.z,
                 y: R[1][0] * acc.x + R[1][1] * acc.y + R[1][2] * acc.z,
                 z: R[2][0] * acc.x + R[2][1] * acc.y + R[2][2] * acc.z
             };
-
-            return rotated;
         }
 
-        // Helper function to multiply two 3x3 matrices
         function multiplyMatrices(a, b) {
             const result = [];
             for (let i = 0; i < 3; i++) {
@@ -130,32 +159,26 @@
             return result;
         }
 
-        // Function to handle motion data
         function handleMotion(event) {
+            if (!isTracking) return;
+
             const now = Date.now();
-            const deltaTime = (now - lastUpdate) / 1000.0; // Time in seconds since last update
+            const deltaTime = (now - lastUpdate) / 1000.0;
             lastUpdate = now;
 
-            // Get acceleration in phone coordinates, ignoring gravity
             let acc = {
                 x: event.acceleration ? event.acceleration.x || 0 : 0,
                 y: event.acceleration ? event.acceleration.y || 0 : 0,
                 z: event.acceleration ? event.acceleration.z || 0 : 0
             };
 
-            // Optionally, you might want to subtract gravity if using acceleration
-            // Here, for simplicity, we proceed without adjusting for gravity
-
-            // Rotate acceleration to world coordinates
             const rotatedAcc = rotateAcceleration(acc, orientation);
 
-            // Integrate acceleration to velocity
             velocity.x += rotatedAcc.x * deltaTime;
             velocity.y += rotatedAcc.y * deltaTime;
             velocity.z += rotatedAcc.z * deltaTime;
 
             if (!fixPosition) {
-                // Integrate velocity to position
                 position.x += velocity.x * deltaTime;
                 position.y += velocity.y * deltaTime;
                 position.z += velocity.z * deltaTime;
@@ -164,62 +187,63 @@
             console.log(`Position updated: (${position.x.toFixed(3)}, ${position.y.toFixed(3)}, ${position.z.toFixed(3)})`);
         }
 
-        // Function to handle orientation data
         function handleOrientation(event) {
-            orientation.alpha = event.alpha || 0; // Rotation around z-axis
-            orientation.beta = event.beta || 0;   // Rotation around x-axis
-            orientation.gamma = event.gamma || 0; // Rotation around y-axis
+            if (!isTracking) return;
+            
+            orientation.alpha = event.alpha || 0;
+            orientation.beta = event.beta || 0;
+            orientation.gamma = event.gamma || 0;
         }
 
-        // Start sending data to the server
         async function startUpdating() {
-            // Fetch initial position from the server
-            await fetchInitialPosition();
+            try {
+                // First check if device supports required features
+                await checkDeviceSupport();
+                
+                // Then request permissions if needed
+                await requestPermissions();
+                
+                // Fetch initial position
+                await fetchInitialPosition();
 
-            // Request permission for motion and orientation events
-            if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                const permission = await DeviceMotionEvent.requestPermission();
-                if (permission !== 'granted') {
-                    alert("Permission denied to access motion data.");
-                    return;
-                }
+                // Add event listeners
+                window.addEventListener('devicemotion', handleMotion);
+                window.addEventListener('deviceorientation', handleOrientation);
+                
+                isTracking = true;
+
+                // Start sending position updates
+                updateIntervalId = setInterval(() => {
+                    const data = `${position.x.toFixed(3)},${position.y.toFixed(3)},${position.z.toFixed(3)},` +
+                                `${orientation.alpha.toFixed(3)},${orientation.beta.toFixed(3)},${orientation.gamma.toFixed(3)}`;
+
+                    fetch('/update-camera', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'text/plain'
+                        },
+                        body: data
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Server responded with status ${response.status}`);
+                        }
+                    })
+                    .catch(err => console.error('Error sending update to camera:', err));
+                }, 100);
+                
+                document.getElementById('start-button').textContent = 'Stop Sharing Location';
+            } catch (error) {
+                console.error('Error starting motion tracking:', error);
+                alert(`Failed to start motion tracking: ${error.message}`);
             }
-
-            // Add event listeners for motion and orientation
-            window.addEventListener('devicemotion', handleMotion);
-            window.addEventListener('deviceorientation', handleOrientation);
-
-            // Start sending position and orientation updates every 100 milliseconds
-            updateIntervalId = setInterval(() => {
-                // Prepare data to send
-                const data = `${position.x.toFixed(3)},${position.y.toFixed(3)},${position.z.toFixed(3)},` +
-                             `${orientation.alpha.toFixed(3)},${orientation.beta.toFixed(3)},${orientation.gamma.toFixed(3)}`;
-
-                // Send the data to the server via POST to /update-camera
-                fetch('/update-camera', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'text/plain'
-                    },
-                    body: data
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Server responded with status ${response.status}`);
-                    }
-                    // Optionally handle server response
-                })
-                .catch(err => console.error('Error sending update to camera:', err));
-            }, 100); // 100 ms interval
         }
 
-        // Function to reset position and velocity
         async function resetPosition() {
             try {
                 await fetch('/reset-camera', {
                     method: 'POST'
                 });
-                // Reset position and velocity to 0
                 position = { ...initialPosition };
                 velocity = { x: 0, y: 0, z: 0 };
                 console.log('Position and velocity have been reset.');
@@ -229,36 +253,40 @@
             }
         }
 
-        // Function to reset velocity
         function resetVelocity() {
             velocity = { x: 0, y: 0, z: 0 };
             console.log('Velocity has been reset.');
         }
 
-        // Function to update the image without flicker
         function updateImage() {
             const image = document.getElementById('image');
             const newImage = new Image();
 
             newImage.src = `/image?timestamp=${Date.now()}`;
             newImage.onload = () => {
-                image.src = newImage.src; // Replace the image source only after the new image is loaded
+                image.src = newImage.src;
             };
         }
 
-        // Set up image update at 10 times per second
         setInterval(updateImage, 100);
 
-        // Button to start sharing location
-        document.getElementById('start-button').addEventListener('click', startUpdating);
+        document.getElementById('start-button').addEventListener('click', function() {
+            if (!isTracking) {
+                startUpdating();
+            } else {
+                // Stop tracking
+                isTracking = false;
+                if (updateIntervalId) {
+                    clearInterval(updateIntervalId);
+                }
+                window.removeEventListener('devicemotion', handleMotion);
+                window.removeEventListener('deviceorientation', handleOrientation);
+                this.textContent = 'Start Sharing Location';
+            }
+        });
 
-        // Button to reset position
         document.getElementById('reset-button').addEventListener('click', resetPosition);
-
-        // Button to reset velocity
         document.getElementById('reset-velocity-button').addEventListener('click', resetVelocity);
-
-        // Button to fix position
         document.getElementById('fix-position-button').addEventListener('click', () => {
             fixPosition = !fixPosition;
             console.log(`Position ${fixPosition ? 'fixed' : 'not fixed'}.`);
