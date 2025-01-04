@@ -68,14 +68,15 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
     std::cout << "---> Raytracing Start <---" << std::endl;
     int n_sample_remain = config.n_samples;
     cudaMemset(d_buffer, 0, n_pixels_ * sizeof(float3));
-    setup_raytrace(
-        d_rand_state_, config.width, config.height,
-        config.camera_pos, config.camera_dir, config.camera_up, config.fov,
-        d_rays
-    );
     cudaDeviceSynchronize();
     while (n_sample_remain > 0) {
         int n_sample = std::min(n_sample_remain, config.batch_size);
+        setup_raytrace(
+            d_rand_state_, config.width, config.height,
+            config.camera_pos, config.camera_dir, config.camera_up, config.fov,
+            d_rays
+        );
+        cudaDeviceSynchronize();
         raytrace(
             d_rand_state_, config.width * config.height, n_sample,
             config.max_depth, config.background, config.russian_roulette,

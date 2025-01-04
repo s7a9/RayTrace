@@ -32,10 +32,10 @@ __global__ void setup_raytrace_kernel(
     if (x >= width || y >= height) return;
     // make camera vectors
     // split the screen into width x height pixels
-    // float u = (x + curand_uniform(&state[idx])) / (float)width;
-    // float v = (y + curand_uniform(&state[idx])) / (float)height;
-    float u = (x + 0.5f) / (float)width;
-    float v = (y + 0.5f) / (float)height;
+    float u = (x + curand_uniform(&state[idx])) / (float)width;
+    float v = (y + curand_uniform(&state[idx])) / (float)height;
+    // float u = (x + 0.5f) / (float)width;
+    // float v = (y + 0.5f) / (float)height;
     float3 ray_dir = normalize(lower_left + u * dx + v * dy);
     rays[idx] = Ray(camera_pos, ray_dir);
 }

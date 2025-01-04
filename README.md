@@ -39,7 +39,9 @@ Please download the corresponding obj model from the url in scene configuration 
 
 Run `bin/main <path/to/scenefile> <path/to/output/dir> <batch_size>`. 
 
-The renderer works in a iterative way to avoid resource overcrowding, just try batch size which fits the gpu vram and make gpu utility full.
+### Hints
+
+The batch size is used to control the number of interations in each kernel launch, but note that **the rays are randomly sampled before each iteration**. Hence, the less the batch size, the more iterations there are and the rays would be more evenly distributed, but the render overhead would be higher.
 
 > ❗️ The material type in the render is different from most wavefront obj files downloaded from internet, which is mostly defined as metal (illum = 2). So you may adjust the `.mtl` file to assign the correct material type.
 
