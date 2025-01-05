@@ -45,3 +45,11 @@ The batch size is used to control the number of interations in each kernel launc
 
 > ❗️ The material type in the render is different from most wavefront obj files downloaded from internet, which is mostly defined as metal (illum = 2). So you may adjust the `.mtl` file to assign the correct material type.
 
+| **mtl illum** | **Material Type**      | **Description**          |
+|---------------|------------------------|--------------------------|
+| 1             | `Material::LAMBERTIAN` | Diffuse (Lambertian)     |
+| 2             | `Material::METAL`      | Metal surface            |
+| 3             | `Material::LIGHT`      | Light-emitting material  |
+| 4             | `Material::REFRACTIVE` | Custom type: glass       |
+| 5             | `Material::REFLECTIVE` | Custom type: mirror      |
+| Default       | `Material::LAMBERTIAN` | Fallback to diffuse      |

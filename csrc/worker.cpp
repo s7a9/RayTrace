@@ -68,7 +68,6 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
     std::cout << "---> Raytracing Start <---" << std::endl;
     int n_sample_remain = config.n_samples;
     cudaMemset(d_buffer, 0, n_pixels_ * sizeof(float3));
-    cudaDeviceSynchronize();
     while (n_sample_remain > 0) {
         int n_sample = std::min(n_sample_remain, config.batch_size);
         setup_raytrace(
