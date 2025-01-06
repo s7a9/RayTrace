@@ -1,5 +1,6 @@
 #include "worker.h"
 
+#include "rasterize.cuh"
 #include "raytrace.cuh"
 
 #include <iostream>
@@ -65,13 +66,17 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
     auto config = loader.config();
     // record start time
     auto start = std::chrono::high_resolution_clock::now();
-    std::cout << "---> Raytracing Start <---" << std::endl;
+    std::cerr << "---> Raytracing Start <---" << std::endl;
     int n_sample_remain = config.n_samples;
     cudaMemset(d_buffer, 0, n_pixels_ * sizeof(float3));
+    rasterize(config, loader.num_object(), loader.host_object(),
+        loader.num_material(), loader.device_materials(), d_buffer, d_depthbuffer_);
+    cudaDeviceSynchronize();
+    std::cerr << "rasterize done" << std::endl;
     while (n_sample_remain > 0) {
         int n_sample = std::min(n_sample_remain, config.batch_size);
         setup_raytrace(
-            d_rand_state_, config.width, config.height,
+            d_rand_state_, d_depthbuffer_, config.width, config.height,
             config.camera_pos, config.camera_dir, config.camera_up, config.fov,
             d_rays
         );
@@ -99,6 +104,7 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
 void Worker::run_loop_() {
     float3* h_buffer = new float3[n_pixels_];
     while (!should_exit.load()) {
+        std::cerr << "worker: waiting for new input" << std::endl;
         if (!has_new_input.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
@@ -145,6 +151,13 @@ Worker::Worker(const std::string& scene_file, const std::string& output_dir, int
             << "error: " << cudaGetErrorString(err) << std::endl;
         exit(0);
     }
+    err = cudaMalloc(&d_depthbuffer_, n_pixels_ * sizeof(float));
+    if (err != cudaSuccess) {
+        std::cerr << "Failed to allocate device memory for depth buffer, " 
+            << "error: " << cudaGetErrorString(err) << std::endl;
+        exit(0);
+    }
+    cudaMemset(d_depthbuffer_, 0, n_pixels_ * sizeof(float));
     cudaDeviceSynchronize();
     // extract scene name as output filename prefix
     auto pos = scene_file.find_last_of('/');
@@ -166,6 +179,7 @@ Worker::~Worker() {
     cudaFree(d_buffer_);
     cudaFree(d_rays_);
     cudaFree(d_rand_state_);
+    cudaFree(d_depthbuffer_);
     delete[] h_buffer_;
 }
 
@@ -184,7 +198,7 @@ void Worker::reset_camera() {
 
 void Worker::update_camera(float3 pos, float3 rot) {
     auto& config = loader.config();
-    // config.camera_pos = pos;
+    config.camera_pos = pos;
     config.camera_pos = initial_cam_pos;
     // calculate camera direction by phone rotation z-alpha, x-beta, y-gamma
     // discard original camera direction

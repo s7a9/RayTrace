@@ -33,6 +33,7 @@ public:
 
     int load_scene(const std::string& filename);
 
+    const RenderObject* host_object() const { return objects_.data(); }
     const RenderObject* device_objects() const { return d_objects_; }
     int num_object() const { return n_objects_; }
 

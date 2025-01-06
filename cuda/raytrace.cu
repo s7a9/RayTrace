@@ -203,7 +203,7 @@ __global__ void raytrace_kernel(
     float3* output_buffer
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n_rays) return;
+    if (i >= n_rays || rays[i].disabled) return;
     curandState* rand = &randstate[i % n_pixel];
     while (spp--) {
         Ray ray = rays[i];

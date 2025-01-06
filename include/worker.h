@@ -35,6 +35,7 @@ class Worker {
     std::string output_dir;
     std::string scene_name;
     float3 initial_cam_pos, initial_cam_dir, initial_cam_up;
+    float* d_depthbuffer_;
 
     void post_process_loop_();
 

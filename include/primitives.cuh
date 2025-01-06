@@ -6,13 +6,14 @@
 namespace vrt {
 
 struct Ray {
+    bool disabled;
     float3 origin;
     float3 direction;
 
     __device__ __host__ Ray() {}
 
     __device__ __host__ Ray(float3 origin, float3 direction) : 
-        origin(origin), direction(direction) {}
+        disabled(false), origin(origin), direction(direction) {}
     
     __device__ __host__ float3 at(float t) const {
         return origin + t * direction;

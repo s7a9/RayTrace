@@ -311,6 +311,12 @@ int SceneLoader::load_scene(const std::string& filename) {
             }
             cur_obj++;
         }
+        else if (config_key == "enable_blend") {
+            config_.blend = true;
+        }
+        else if (config_key == "msaa") {
+            file >> config_.msaa;
+        }
         else if (config_key == "end") {
             break;
         }

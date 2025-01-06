@@ -21,7 +21,7 @@ __host__ void init_randstate(curandState** state, int width, int height) {
 }
 
 __global__ void setup_raytrace_kernel(
-    curandState *state,
+    curandState *state, const float* depthbuffer,
     int width, int height,
     float3 camera_pos, float3 lower_left, float3 dx, float3 dy,
     float fov, Ray* rays
@@ -38,10 +38,11 @@ __global__ void setup_raytrace_kernel(
     // float v = (y + 0.5f) / (float)height;
     float3 ray_dir = normalize(lower_left + u * dx + v * dy);
     rays[idx] = Ray(camera_pos, ray_dir);
+    rays[idx].disabled = depthbuffer[idx] < 0.0f || depthbuffer[idx] > 1.0f;
 }
 
 __host__ void setup_raytrace(
-    curandState *state,
+    curandState *state, const float* depthbuffer,
     int width, int height,
     float3 camera_pos, float3 camera_dir, float3 camera_up, float fov,
     Ray* rays
@@ -59,8 +60,8 @@ __host__ void setup_raytrace(
     float3 dy = 2.0f * half_height * camera_up;
     dim3 block(16, 16);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
-    setup_raytrace_kernel<<<grid, block>>>(state, width, height, camera_pos, 
-        lower_left, dx, dy, fov, rays);
+    setup_raytrace_kernel<<<grid, block>>>(state, depthbuffer, 
+        width, height, camera_pos, lower_left, dx, dy, fov, rays);
 }
 
 } // namespace vrt

@@ -17,6 +17,8 @@ constexpr int MAX_MAT_PER_OBJECT = 8;
 constexpr int MAX_HIT_STACK_SIZE = 32;
 
 struct RenderConfig {
+    bool blend;
+    int msaa;
     int max_depth;
     int max_surface;
     int width;
