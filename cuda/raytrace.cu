@@ -205,6 +205,7 @@ __global__ void raytrace_kernel(
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n_rays) return;
     curandState* rand = &randstate[i % n_pixel];
+    float3 total_color = make_float3(0.0f, 0.0f, 0.0f);
     while (spp--) {
         Ray ray = rays[i];
         float3 color = make_float3(1.0f, 1.0f, 1.0f);
@@ -240,11 +241,9 @@ __global__ void raytrace_kernel(
             }
         }
         if (depth < 0) continue;
-        // atmoically add the color to the output buffer;
-        atomicAdd(&output_buffer[i].x, color.x);
-        atomicAdd(&output_buffer[i].y, color.y);
-        atomicAdd(&output_buffer[i].z, color.z);
+        total_color += color;
     }
+    output_buffer[i] += total_color;
 }
 
 __global__ void post_process_kernel(int n_pixels, int spp, float gamma, float3* output_buffer) {
