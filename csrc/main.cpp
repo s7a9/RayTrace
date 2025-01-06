@@ -15,7 +15,6 @@ int main(int argc, char** argv) {
     Worker worker(argv[1], argv[2], batch_size);
     worker.run();
     worker.force_render();
-    std::this_thread::sleep_for(std::chrono::seconds(1));
     worker.stop();
     return 0;
 }

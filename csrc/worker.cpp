@@ -14,7 +14,7 @@ namespace vrt {
 void Worker::post_process_loop_() {
     while (!should_exit.load() || has_new_input.load() || has_new_output.load()) {
         if (!has_new_output.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::yield();
             continue;
         }
         cv::Mat img(loader.config().height, loader.config().width, CV_32FC3);
@@ -98,9 +98,9 @@ void Worker::render_(float3* d_buffer, Ray* d_rays) {
 
 void Worker::run_loop_() {
     float3* h_buffer = new float3[n_pixels_];
-    while (!should_exit.load()) {
+    while (!should_exit.load() || has_new_input.load()) {
         if (!has_new_input.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::yield();
             continue;
         }
         render_(d_buffer_, d_rays_); // leave for double buffering
@@ -184,7 +184,7 @@ void Worker::reset_camera() {
 
 void Worker::update_camera(float3 pos, float3 rot) {
     auto& config = loader.config();
-    // config.camera_pos = pos;
+    config.camera_pos = pos;
     config.camera_pos = initial_cam_pos;
     // calculate camera direction by phone rotation z-alpha, x-beta, y-gamma
     // discard original camera direction

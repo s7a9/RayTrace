@@ -9,10 +9,10 @@ camera_pos 0 -9 4.5
 camera_dir 0 1 -.1
 camera_up 0 0 1
 fov 60
-gamma 1
+gamma 1.2
 size 1200 1200
-sample_per_pixel 16
-background 0 0 0 
+sample_per_pixel 256
+background 0.01 0.0 0.01
 russian_roulette 0.9
 
 object
@@ -37,6 +37,15 @@ object
     metal_fuzz 0.5
     optical_density 3
     simple_material
+end
+
+object
+    path assets/obj/simple/plane1.obj
+    position 0 -10 0
+    rotation 0 0 0
+    scale 5 0 5
+    albedo 1.0 1.0 1.0
+    type light
 end
 
 object
