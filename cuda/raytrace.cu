@@ -268,7 +268,7 @@ __host__ void raytrace(
     int n_materials, const Material* materials,
     float3* output_buffer
 ) {
-    int block_size = 64;
+    int block_size = 32;
     int num_blocks = (n_rays + block_size - 1) / block_size;
     raytrace_kernel<<<num_blocks, block_size>>>(
         randstate, n_pixel, spp, ambient, max_depth, russian_roulette,
